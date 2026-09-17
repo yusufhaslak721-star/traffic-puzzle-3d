@@ -1,56 +1,75 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
 
-// Premium CC0 vehicle replacements from 3DAssets.dev.
-// They are loaded directly from the provider CDN and automatically fall back
-// to the original Kenney model if the premium asset cannot be loaded.
-const PREMIUM_REPLACEMENTS = [
-  {
-    test: /\/sedan\.glb(?:[?#]|$)/i,
-    url: 'https://cdn.3dassets.dev/assets/32487/v1/model.glb',
-    name: 'City car'
-  },
-  {
-    test: /\/hatchbackSports\.glb(?:[?#]|$)/i,
-    url: 'https://cdn.3dassets.dev/assets/32493/v1/model.glb',
-    name: 'Three-door hatchback'
-  },
-  {
-    test: /\/(?:sedanSports|race|raceFuture)\.glb(?:[?#]|$)/i,
-    url: 'https://cdn.3dassets.dev/assets/32495/v1/model.glb',
-    name: 'Mid-engine sports car'
-  }
+const DIRECT=[
+  {test:/\/sedan\.glb(?:[?#]|$)/i,url:'https://cdn.3dassets.dev/assets/32487/v1/model.glb',name:'City car'},
+  {test:/\/hatchbackSports\.glb(?:[?#]|$)/i,url:'https://cdn.3dassets.dev/assets/32493/v1/model.glb',name:'Three-door hatchback'},
+  {test:/\/(?:sedanSports|race|raceFuture)\.glb(?:[?#]|$)/i,url:'https://cdn.3dassets.dev/assets/32495/v1/model.glb',name:'Mid-engine sports car'},
+  {test:/\/firetruck\.glb(?:[?#]|$)/i,url:'https://cdn.3dassets.dev/assets/24904/v1/model.glb',name:'Fire engine'}
 ];
 
-if (!GLTFLoader.prototype.__karagamePremiumRedirect) {
-  GLTFLoader.prototype.__karagamePremiumRedirect = true;
-  const originalLoad = GLTFLoader.prototype.load;
+const FLEET='https://cdn.3dassets.dev/assets/32562/v1/model.glb';
+const STARTER_SPECS=[
+  {test:/\/suvLuxury\.glb(?:[?#]|$)/i,label:'Executive SUV',tokens:[['large','suv'],['executive','saloon'],['mid','size','suv']]},
+  {test:/\/suv\.glb(?:[?#]|$)/i,label:'Mid-size SUV',tokens:[['mid','size','suv'],['city','suv'],['compact','crossover']]},
+  {test:/\/taxi\.glb(?:[?#]|$)/i,label:'Licensed taxi',tokens:[['licensed','taxi'],['taxi','saloon'],['taxi']]},
+  {test:/\/police\.glb(?:[?#]|$)/i,label:'Police patrol car',tokens:[['police','patrol'],['police']]},
+  {test:/\/ambulance\.glb(?:[?#]|$)/i,label:'Ambulance response estate',tokens:[['ambulance','response'],['ambulance']]},
+  {test:/\/delivery\.glb(?:[?#]|$)/i,label:'Parcel delivery van',tokens:[['parcel','delivery','van'],['delivery','van'],['medium','panel','van']]},
+  {test:/\/van\.glb(?:[?#]|$)/i,label:'Medium panel van',tokens:[['medium','panel','van'],['panel','van'],['crew','van']]},
+  {test:/\/truckFlat\.glb(?:[?#]|$)/i,label:'Flatbed truck',tokens:[['flatbed','truck'],['dropside','flatbed'],['flat','bed']]},
+  {test:/\/truck\.glb(?:[?#]|$)/i,label:'Rigid truck',tokens:[['box','truck'],['curtainside','rigid'],['tipper','truck'],['truck']]},
+  {test:/\/tractor\.glb(?:[?#]|$)/i,label:'4x4 utility vehicle',tokens:[['ladder','frame','4x4'],['boxy','off','roader'],['pickup']]}
+];
 
-  GLTFLoader.prototype.load = function(url, onLoad, onProgress, onError) {
-    const replacement = PREMIUM_REPLACEMENTS.find(entry => entry.test.test(String(url)));
-    if (!replacement) return originalLoad.call(this, url, onLoad, onProgress, onError);
+function clean(s){return String(s||'').toLowerCase().replace(/[_\-.]+/g,' ').replace(/\s+/g,' ').trim()}
+function findBest(scene,tokenSets){
+  const list=[];
+  scene.traverse(o=>{
+    const n=clean(o.name);if(!n)return;
+    let score=0;
+    for(const set of tokenSets){
+      const hits=set.filter(t=>n.includes(t)).length;
+      score=Math.max(score,hits===set.length?100+hits*12:hits*7);
+    }
+    if(score>0)list.push({o,score,n});
+  });
+  list.sort((a,b)=>b.score-a.score||a.n.length-b.n.length);
+  const best=list[0]?.o;if(!best)return null;
+  let root=best;
+  while(root.parent&&root.parent!==scene){
+    const pn=clean(root.parent.name);
+    if(pn&&tokenSets.some(set=>set.some(t=>pn.includes(t))))root=root.parent;else break;
+  }
+  return root.clone(true);
+}
 
-    const loadOriginal = () => originalLoad.call(this, url, onLoad, onProgress, onError);
+if(!GLTFLoader.prototype.__karagamePremiumRedirectV2){
+  GLTFLoader.prototype.__karagamePremiumRedirectV2=true;
+  const originalLoad=GLTFLoader.prototype.load;
+  let fleetPromise=null;
+  const loadFleet=()=>fleetPromise||(fleetPromise=new Promise((resolve,reject)=>{
+    const l=new GLTFLoader();originalLoad.call(l,FLEET,g=>resolve(g.scene),undefined,reject);
+  }));
 
-    return originalLoad.call(
-      this,
-      replacement.url,
-      gltf => {
-        // 3DAssets.dev vehicles are +Z forward. The existing normalizer rotates
-        // Kenney assets by PI, so this inner wrapper compensates that rotation.
-        const wrapper = new THREE.Group();
-        gltf.scene.rotation.y = Math.PI;
-        wrapper.add(gltf.scene);
-        wrapper.userData.premiumVehicle = true;
-        wrapper.userData.premiumVehicleName = replacement.name;
-        gltf.scene = wrapper;
-        onLoad?.(gltf);
-      },
-      onProgress,
-      err => {
-        console.warn(`Premium vehicle failed (${replacement.name}); using original asset.`, err);
-        loadOriginal();
-      }
-    );
+  const wrap=(scene,name)=>{
+    const wrapper=new THREE.Group();scene.rotation.y=Math.PI;wrapper.add(scene);
+    wrapper.userData.premiumVehicle=true;wrapper.userData.premiumVehicleName=name;return wrapper;
+  };
+
+  GLTFLoader.prototype.load=function(url,onLoad,onProgress,onError){
+    const s=String(url),direct=DIRECT.find(x=>x.test.test(s));
+    const original=()=>originalLoad.call(this,url,onLoad,onProgress,onError);
+    if(direct){
+      return originalLoad.call(this,direct.url,g=>{g.scene=wrap(g.scene,direct.name);onLoad?.(g)},onProgress,err=>{console.warn('Premium vehicle failed:',direct.name,err);original()});
+    }
+    const spec=STARTER_SPECS.find(x=>x.test.test(s));
+    if(!spec)return original();
+    loadFleet().then(scene=>{
+      const picked=findBest(scene,spec.tokens);
+      if(!picked){console.warn('Premium fleet model not found:',spec.label);return original()}
+      onLoad?.({scene:wrap(picked,spec.label),animations:[]});
+    }).catch(err=>{console.warn('Premium fleet pack failed:',err);original()});
+    return this;
   };
 }
