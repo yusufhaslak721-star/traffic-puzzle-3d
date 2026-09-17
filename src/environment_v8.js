@@ -62,6 +62,10 @@ export function createEnvironment(ctx){
     const {w,h}=viewportSize();
     if(!force&&Math.abs(w-lastW)<2&&Math.abs(h-lastH)<2)return false;
     lastW=w;lastH=h;
+    const pxH=`${h}px`;
+    document.documentElement.style.height=pxH;
+    document.body.style.height=pxH;
+    const app=document.getElementById('app');if(app)app.style.height=pxH;
     ctx.renderer.setSize(w,h,false);
     ctx.camera.aspect=w/h;
     ctx.camera.updateProjectionMatrix();
