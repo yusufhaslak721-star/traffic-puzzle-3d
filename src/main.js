@@ -54,7 +54,7 @@ function buildWorld(theme){
 }
 
 const loader=new GLTFLoader();
-const CAR_BASE='https://cdn.jsdelivr.net/gh/kidscancode/3d_car_sphere@main/assets/kenney_car_kit/';
+const CAR_BASE='https://cdn.jsdelivr.net/gh/kidscancode/3d_car_sphere@cabc5c0019e68913012fc41d7b2ded6dcef3be31/assets/kenney_car_kit/';
 const carFiles={sedan:'sedan.glb',hatch:'hatchbackSports.glb',suv:'suv.glb',taxi:'taxi.glb',van:'van.glb',ambulance:'ambulance.glb',police:'police.glb',fire:'firetruck.glb',sports:'sedanSports.glb',truck:'truck.glb'};
 const cache=new Map();
 function getAsset(type){
@@ -73,7 +73,7 @@ function fallbackVehicle(v){
   const big=['van','ambulance','fire','truck'].includes(v.type),L=v.type==='fire'?4.1:big?3.45:v.type==='suv'?3.1:2.95,W=big?1.55:1.45,H=big?1.0:v.type==='suv'?.84:.68,c=v.color||0xd54c43;
   const body=box(W,H,L,c,0,.58,0,g,.34,.16);body.geometry.translate(0,0,0);
   box(W*.96,.13,L*.72,c,0,.92,-.08,g,.3,.16);
-  const cabin=box(W*.83,big?.62:.52,big?L*.46:L*.48,big?c:0x365765,0,big?1.25:1.16,-.2,g,.22,.12);
+  box(W*.83,big?.62:.52,big?L*.46:L*.48,big?c:0x365765,0,big?1.25:1.16,-.2,g,.22,.12);
   if(!big){for(const sx of [-1,1])box(.04,.36,L*.25,0x668e9b,sx*W*.42,1.15,-.2,g,.2,.08)}
   for(const x of [-W*.51,W*.51])for(const z of [-L*.31,L*.31])wheel(g,x,z,big?.34:.3);
   for(const x of [-W*.28,W*.28]){const h=box(.22,.2,.06,0xffdf91,x,.62,L/2+.035,g);h.material=new THREE.MeshStandardMaterial({color:0xffe7a8,emissive:0xffbf44,emissiveIntensity:.7});const t=box(.22,.18,.06,0xde2633,x,.61,-L/2-.035,g);t.material=new THREE.MeshStandardMaterial({color:0xe52d37,emissive:0x7c0710,emissiveIntensity:.6})}
@@ -126,5 +126,4 @@ function grid(){const g=$('#levelGrid');g.innerHTML='';levels.forEach((l,i)=>{co
 $('#levelsBtn').onclick=()=>{grid();menu.classList.remove('visible');select.classList.add('visible')};
 $('#closeLevels').onclick=()=>{select.classList.remove('visible');menu.classList.add('visible')};
 
-// Warm up common models in the background. Gameplay never waits for these: fallbacks are instant.
 ['sedan','hatch','suv','taxi'].forEach(t=>getAsset(t).catch(()=>{}));
