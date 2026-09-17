@@ -1,57 +1,92 @@
 import * as THREE from 'three';
 import {createEnvironment as createBaseEnvironment} from './environment_base.js';
 
-function focusPoint(level){
-  const pts=[];
-  for(const n of level?.network?.nodes||[])if(n.intersection)pts.push(new THREE.Vector3(n.x,0,n.z));
-  if(!pts.length)return new THREE.Vector3();
-  return new THREE.Box3().setFromPoints(pts).getCenter(new THREE.Vector3());
+function gameplayBounds(level){
+  const nodes=level?.network?.nodes||[];
+  if(!nodes.length)return{target:new THREE.Vector3(),points:[new THREE.Vector3()]};
+  let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  for(const n of nodes){minX=Math.min(minX,n.x);maxX=Math.max(maxX,n.x);minZ=Math.min(minZ,n.z);maxZ=Math.max(maxZ,n.z)}
+  const pad=4.8;
+  minX-=pad;maxX+=pad;minZ-=pad;maxZ+=pad;
+  const target=new THREE.Vector3((minX+maxX)/2,0,(minZ+maxZ)/2);
+  const points=[
+    new THREE.Vector3(minX,0,minZ),new THREE.Vector3(maxX,0,minZ),
+    new THREE.Vector3(minX,0,maxZ),new THREE.Vector3(maxX,0,maxZ),
+    new THREE.Vector3(minX,2.8,minZ),new THREE.Vector3(maxX,2.8,minZ),
+    new THREE.Vector3(minX,2.8,maxZ),new THREE.Vector3(maxX,2.8,maxZ),
+  ];
+  return{target,points};
 }
 
-function intersectionsVisible(level,camera){
+function allGameplayVisible(camera,points){
   camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
-  for(const n of level?.network?.nodes||[]){
-    if(!n.intersection)continue;
-    const p=new THREE.Vector3(n.x,0,n.z).project(camera);
-    if(!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.z<-1||p.z>1||Math.abs(p.x)>.82||p.y<-.78||p.y>.78)return false;
+  const xLimit=camera.aspect>1.55?.88:.84;
+  const top=.73,bottom=-.76;
+  for(const w of points){
+    const p=w.clone().project(camera);
+    if(!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.z<-1||p.z>1)return false;
+    if(Math.abs(p.x)>xLimit||p.y>top||p.y<bottom)return false;
   }
   return true;
 }
 
-function tightenCamera(level,camera){
-  const target=focusPoint(level);
-  const base=camera.position.clone();
-  const delta=base.clone().sub(target);
-  const attempts=[.6,.66,.72,.78,.84,.9,.96,1];
-  for(const s of attempts){
-    camera.position.copy(target).addScaledVector(delta,s);
+function fitGameplay(level,camera,seedVector){
+  const {target,points}=gameplayBounds(level);
+  const seed=seedVector?.clone?.()||camera.position.clone().sub(target);
+  if(seed.length()<1)seed.set(20,34,20);
+  const tries=[1,1.08,1.16,1.25,1.36,1.48,1.62,1.78,1.96,2.16,2.4,2.7,3.05];
+  for(const s of tries){
+    camera.position.copy(target).addScaledVector(seed,s);
     camera.lookAt(target);
     camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
-    if(intersectionsVisible(level,camera))return;
+    if(allGameplayVisible(camera,points))return;
   }
-  camera.position.copy(base);
+  camera.position.copy(target).addScaledVector(seed,3.35);
   camera.lookAt(target);
   camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
 }
 
 export function createEnvironment(ctx){
   const base=createBaseEnvironment(ctx);
-  let active=null,lastAspect=ctx.camera.aspect;
+  let active=null,seedVector=null,lastW=0,lastH=0;
+
+  function viewportSize(){
+    const vv=window.visualViewport;
+    return{
+      w:Math.max(1,Math.round(vv?.width||window.innerWidth||1)),
+      h:Math.max(1,Math.round(vv?.height||window.innerHeight||1)),
+    };
+  }
+
+  function syncViewport(force=false){
+    const {w,h}=viewportSize();
+    if(!force&&Math.abs(w-lastW)<2&&Math.abs(h-lastH)<2)return false;
+    lastW=w;lastH=h;
+    ctx.renderer.setSize(w,h,false);
+    ctx.camera.aspect=w/h;
+    ctx.camera.updateProjectionMatrix();
+    if(active&&seedVector)fitGameplay(active,ctx.camera,seedVector);
+    return true;
+  }
+
+  const onViewport=()=>syncViewport(true);
+  window.visualViewport?.addEventListener('resize',onViewport);
+  window.addEventListener('orientationchange',onViewport);
+
   return{
     build(level){
       active=level;
+      syncViewport(true);
       base.build(level);
       ctx.scene.fog=null;
-      tightenCamera(level,ctx.camera);
-      lastAspect=ctx.camera.aspect;
+      const {target}=gameplayBounds(level);
+      seedVector=ctx.camera.position.clone().sub(target);
+      fitGameplay(level,ctx.camera,seedVector);
     },
     update(dt,now){
       base.update(dt,now);
       ctx.scene.fog=null;
-      if(active&&Math.abs(ctx.camera.aspect-lastAspect)>.01){
-        tightenCamera(active,ctx.camera);
-        lastAspect=ctx.camera.aspect;
-      }
+      syncViewport(false);
     }
   };
 }
