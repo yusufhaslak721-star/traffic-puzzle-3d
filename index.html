@@ -12,25 +12,28 @@
     <canvas id="game"></canvas>
     <header class="hud">
       <button id="homeBtn" class="glass icon">⌂</button>
-      <div class="level-card"><small>BÖLÜM</small><strong id="levelLabel">1</strong></div>
+      <div class="level-card"><small id="levelWord">BÖLÜM</small><strong id="levelLabel">1</strong></div>
       <div class="goal-card"><span>🚗</span><strong id="remaining">0</strong></div>
       <button id="soundBtn" class="glass icon">🔊</button>
     </header>
-    <div id="message" class="message">Araçlara dokun ve trafiği temizle</div>
+    <div id="message" class="message">Araçlara dokun ve doğru sırayı seç</div>
     <section id="menu" class="overlay visible">
-      <div class="brand"><span class="eyebrow">KARAGAMESTUDIO</span><h1>TRAFFIC<br><em>PUZZLE 3D</em></h1><p>Doğru sırayı bul. Yolu temizle.</p></div>
-      <button id="playBtn" class="primary">OYNA <span>▶</span></button>
-      <button id="levelsBtn" class="secondary">BÖLÜMLER</button>
+      <div class="brand"><span class="eyebrow">KARAGAMESTUDIO</span><h1>TRAFFIC<br><em>PUZZLE 3D</em></h1><p id="menuTagline">Doğru sırayı bul. Yolu temizle.</p></div>
+      <div class="language-card"><span id="langTitle">DİL</span><div class="language-switch"><button id="langTR" class="active">TR</button><button id="langEN">EN</button></div></div>
+      <button id="playBtn" class="primary"><span id="playText">OYNA</span> <span>▶</span></button>
+      <button id="levelsBtn" class="secondary"><span id="levelsText">BÖLÜMLER</span></button>
     </section>
     <section id="levelSelect" class="overlay panel">
-      <h2>Bölümler</h2><div id="levelGrid" class="level-grid"></div><button id="closeLevels" class="secondary">GERİ</button>
+      <h2 id="levelsTitle">Bölümler</h2>
+      <div class="level-scroll"><div id="levelGrid" class="level-grid"></div></div>
+      <button id="closeLevels" class="secondary"><span id="closeText">GERİ</span></button>
     </section>
     <section id="result" class="overlay panel result">
       <div id="resultIcon" class="result-icon">✓</div><h2 id="resultTitle">Harika!</h2><p id="resultText">Yol temizlendi.</p>
-      <button id="nextBtn" class="primary">SONRAKİ BÖLÜM</button><button id="retryBtn" class="secondary">TEKRAR</button>
+      <button id="nextBtn" class="primary"><span id="nextText">SONRAKİ BÖLÜM</span></button><button id="retryBtn" class="secondary"><span id="retryText">TEKRAR</span></button>
     </section>
   </div>
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
-  <script type="module" src="./src/main_v3.js"></script>
+  <script type="module" src="./src/main_v4.js"></script>
 </body>
 </html>
