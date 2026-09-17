@@ -1,4 +1,4 @@
-import {levels as sourceLevels} from 'https://cdn.jsdelivr.net/gh/yusufhaslak721-star/traffic-puzzle-3d@35c0685c1a0e90be161ebb68d6ea71db2b744c50/src/levels100.js';
+import {levels as sourceLevels} from './levels100.js';
 
 const VEHICLE_LENGTH={fire:4.15,truck:3.7,flatbed:3.7,delivery:3.7,ambulance:3.5,van:3.5,tractor:3.5,suv:3.15,luxury:3.15};
 const vLength=t=>VEHICLE_LENGTH[t]||2.95;
