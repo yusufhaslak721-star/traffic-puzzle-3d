@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {createEnvironment as createBaseEnvironment} from './environment_v8.js';
+import {createPremiumRoads} from './premium_roads.js';
 
 function makeBird(){
   const g=new THREE.Group();
@@ -16,6 +17,7 @@ function makeBird(){
 
 export function createEnvironment(ctx){
   const base=createBaseEnvironment(ctx);
+  const roads=createPremiumRoads(ctx.world);
   const flock=new THREE.Group();
   ctx.scene.add(flock);
   let active=null;
@@ -40,7 +42,7 @@ export function createEnvironment(ctx){
   }
 
   return{
-    build(level){base.build(level);rebuildFlock(level)},
+    build(level){base.build(level);roads.build(level);rebuildFlock(level)},
     update(dt,now){
       base.update(dt,now);
       const t=now*.00042;
