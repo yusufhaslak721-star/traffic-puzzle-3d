@@ -39,8 +39,6 @@ function buildLaneRoute(network,ids,lane=1.78){
     const exit=[c[0]+dout[0]*r+nout[0]*lane,c[1]+dout[1]*r+nout[1]*lane];
     const control=[c[0]+(nin[0]+nout[0])*lane,c[1]+(nin[1]+nout[1])*lane];
     addLine(out,out[out.length-1],approach);
-    // Keep the actual Catmull-Rom drive smooth, but expose a clear heading change in the
-    // route control points so the roof arrow can correctly say straight/left/right.
     for(const t of[.5,1])addPoint(out,quad(approach,control,exit,t));
   }
   const last=centers.length-1,nl=normalRight(dirs[dirs.length-1]),end=[centers[last][0]+nl[0]*lane,centers[last][1]+nl[1]*lane];
@@ -49,6 +47,36 @@ function buildLaneRoute(network,ids,lane=1.78){
 }
 
 function parseRoute(v){const s=String(v.route?.name||'').split('-');return[s[0],s[1]]}
+function hashId(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function routeStats(network,ids){
+  const map=nodeMap(network),pts=ids.map(id=>map.get(id)).filter(Boolean),dirs=[];
+  for(let i=1;i<pts.length;i++){const dx=pts[i].x-pts[i-1].x,dz=pts[i].z-pts[i-1].z,l=Math.hypot(dx,dz)||1;dirs.push([dx/l,dz/l])}
+  let turns=0;
+  for(let i=1;i<dirs.length;i++)if(dirs[i-1][0]*dirs[i][0]+dirs[i-1][1]*dirs[i][1]<.985)turns++;
+  const junctions=ids.filter(id=>String(id).startsWith('I')).length;
+  return{turns,junctions,segments:Math.max(0,ids.length-1)};
+}
+function chooseSimpleRoute(network,src,preferredDst,vehicleId){
+  const options=(network.boundary||[]).filter(dst=>dst!==src).map(dst=>{
+    const ids=pathIds(network,src,dst);if(ids.length<2)return null;
+    return{dst,ids,...routeStats(network,ids)};
+  }).filter(Boolean);
+  if(!options.length)return null;
+
+  // A roof arrow describes one manoeuvre. Prefer routes that need at most one real turn
+  // and no more than two junctions, so a car never snakes through half the city after one tap.
+  let pool=options.filter(o=>o.turns<=1&&o.junctions<=2);
+  if(!pool.length)pool=options.filter(o=>o.turns<=1);
+  if(!pool.length){
+    const bestTurns=Math.min(...options.map(o=>o.turns));
+    pool=options.filter(o=>o.turns===bestTurns);
+  }
+  pool.sort((a,b)=>a.turns-b.turns||a.junctions-b.junctions||a.segments-b.segments||((a.dst===preferredDst)?-1:0)-((b.dst===preferredDst)?-1:0));
+  const bestScore=pool[0].turns*100+pool[0].junctions*10+pool[0].segments;
+  const near=pool.filter(o=>o.turns*100+o.junctions*10+o.segments<=bestScore+2).slice(0,3);
+  return near[hashId(vehicleId||src)%near.length]||pool[0];
+}
+
 function extendBusyEntries(level){
   const groups=new Map();
   for(const v of level.vehicles){const[src]=parseRoute(v);if(!src)continue;if(!groups.has(src))groups.set(src,[]);groups.get(src).push(v)}
@@ -64,7 +92,12 @@ function extendBusyEntries(level){
 function rebuildLevel(level){
   extendBusyEntries(level);
   const groups=new Map();
-  for(const v of level.vehicles){const[src,dst]=parseRoute(v),ids=pathIds(level.network,src,dst);if(ids.length<2)continue;v.route={name:`${src}-${dst}`,points:buildLaneRoute(level.network,ids,1.78)};if(!groups.has(src))groups.set(src,[]);groups.get(src).push(v)}
+  for(const v of level.vehicles){
+    const[src,preferredDst]=parseRoute(v),choice=chooseSimpleRoute(level.network,src,preferredDst,v.id);
+    if(!choice?.ids?.length)continue;
+    v.route={name:`${src}-${choice.dst}`,points:buildLaneRoute(level.network,choice.ids,1.78)};
+    if(!groups.has(src))groups.set(src,[]);groups.get(src).push(v);
+  }
   for(const group of groups.values()){
     group.sort((a,b)=>a.id.localeCompare(b.id));
     let along=3.0;
