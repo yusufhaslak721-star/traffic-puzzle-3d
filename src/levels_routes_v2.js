@@ -31,9 +31,7 @@ function buildLaneRoute(network,ids,lane=1.78){
   addPoint(out,[centers[0][0]+n0[0]*lane,centers[0][1]+n0[1]*lane]);
   for(let i=1;i<centers.length-1;i++){
     const c=centers[i],din=dirs[i-1],dout=dirs[i],nin=normalRight(din),nout=normalRight(dout),dot=din[0]*dout[0]+din[1]*dout[1];
-    if(dot>.985){
-      const target=[c[0]+nin[0]*lane,c[1]+nin[1]*lane];addLine(out,out[out.length-1],target);continue;
-    }
+    if(dot>.985){const target=[c[0]+nin[0]*lane,c[1]+nin[1]*lane];addLine(out,out[out.length-1],target);continue}
     const r=3.15;
     const approach=[c[0]-din[0]*r+nin[0]*lane,c[1]-din[1]*r+nin[1]*lane];
     const exit=[c[0]+dout[0]*r+nout[0]*lane,c[1]+dout[1]*r+nout[1]*lane];
@@ -51,30 +49,54 @@ function hashId(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCod
 function routeStats(network,ids){
   const map=nodeMap(network),pts=ids.map(id=>map.get(id)).filter(Boolean),dirs=[];
   for(let i=1;i<pts.length;i++){const dx=pts[i].x-pts[i-1].x,dz=pts[i].z-pts[i-1].z,l=Math.hypot(dx,dz)||1;dirs.push([dx/l,dz/l])}
-  let turns=0;
-  for(let i=1;i<dirs.length;i++)if(dirs[i-1][0]*dirs[i][0]+dirs[i-1][1]*dirs[i][1]<.985)turns++;
+  let turns=0,maneuver='straight';
+  for(let i=1;i<dirs.length;i++){
+    const a=dirs[i-1],b=dirs[i],dot=a[0]*b[0]+a[1]*b[1];
+    if(dot<.985){
+      turns++;
+      if(maneuver==='straight'){
+        const cross=a[1]*b[0]-a[0]*b[1];
+        maneuver=cross>0?'right':'left';
+      }
+    }
+  }
   const junctions=ids.filter(id=>String(id).startsWith('I')).length;
-  return{turns,junctions,segments:Math.max(0,ids.length-1)};
+  return{turns,junctions,segments:Math.max(0,ids.length-1),maneuver};
 }
-function chooseSimpleRoute(network,src,preferredDst,vehicleId){
+function routeOptions(network,src){
   const options=(network.boundary||[]).filter(dst=>dst!==src).map(dst=>{
     const ids=pathIds(network,src,dst);if(ids.length<2)return null;
     return{dst,ids,...routeStats(network,ids)};
   }).filter(Boolean);
-  if(!options.length)return null;
+  if(!options.length)return[];
 
-  // A roof arrow describes one manoeuvre. Prefer routes that need at most one real turn
-  // and no more than two junctions, so a car never snakes through half the city after one tap.
-  let pool=options.filter(o=>o.turns<=1&&o.junctions<=2);
+  let pool=options.filter(o=>o.turns<=1&&o.junctions<=3);
   if(!pool.length)pool=options.filter(o=>o.turns<=1);
   if(!pool.length){
     const bestTurns=Math.min(...options.map(o=>o.turns));
     pool=options.filter(o=>o.turns===bestTurns);
   }
-  pool.sort((a,b)=>a.turns-b.turns||a.junctions-b.junctions||a.segments-b.segments||((a.dst===preferredDst)?-1:0)-((b.dst===preferredDst)?-1:0));
-  const bestScore=pool[0].turns*100+pool[0].junctions*10+pool[0].segments;
-  const near=pool.filter(o=>o.turns*100+o.junctions*10+o.segments<=bestScore+2).slice(0,3);
-  return near[hashId(vehicleId||src)%near.length]||pool[0];
+  pool.sort((a,b)=>a.turns-b.turns||a.junctions-b.junctions||a.segments-b.segments||String(a.dst).localeCompare(String(b.dst)));
+  return pool;
+}
+function assignRoutesForSource(level,src,group){
+  const options=routeOptions(level.network,src);if(!options.length)return;
+  const by=new Map();
+  for(const o of options){if(!by.has(o.maneuver))by.set(o.maneuver,[]);by.get(o.maneuver).push(o)}
+  const preferredOrder=['left','straight','right'].filter(k=>by.has(k));
+  const classes=preferredOrder.length?preferredOrder:[...by.keys()];
+  const offset=classes.length?hashId(`${level.number||0}:${src}`)%classes.length:0;
+  const usage=new Map();
+  group.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+
+  for(let i=0;i<group.length;i++){
+    const v=group[i],cls=classes[(i+offset)%classes.length],choices=by.get(cls)||options;
+    choices.sort((a,b)=>(usage.get(a.dst)||0)-(usage.get(b.dst)||0)||a.junctions-b.junctions||a.segments-b.segments);
+    const choice=choices[0]||options[i%options.length];
+    usage.set(choice.dst,(usage.get(choice.dst)||0)+1);
+    v.route={name:`${src}-${choice.dst}`,points:buildLaneRoute(level.network,choice.ids,1.78)};
+    v.userData={...(v.userData||{}),routeManeuver:choice.maneuver};
+  }
 }
 
 function extendBusyEntries(level){
@@ -92,14 +114,11 @@ function extendBusyEntries(level){
 function rebuildLevel(level){
   extendBusyEntries(level);
   const groups=new Map();
-  for(const v of level.vehicles){
-    const[src,preferredDst]=parseRoute(v),choice=chooseSimpleRoute(level.network,src,preferredDst,v.id);
-    if(!choice?.ids?.length)continue;
-    v.route={name:`${src}-${choice.dst}`,points:buildLaneRoute(level.network,choice.ids,1.78)};
-    if(!groups.has(src))groups.set(src,[]);groups.get(src).push(v);
-  }
+  for(const v of level.vehicles){const[src]=parseRoute(v);if(!src)continue;if(!groups.has(src))groups.set(src,[]);groups.get(src).push(v)}
+  for(const [src,group] of groups)assignRoutesForSource(level,src,group);
+
   for(const group of groups.values()){
-    group.sort((a,b)=>a.id.localeCompare(b.id));
+    group.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
     let along=3.0;
     for(const v of group){const len=routeLength(v.route.points);v.start=+Math.min(.42,along/Math.max(1,len)).toFixed(4);along+=vLength(v.type)+1.15}
   }
