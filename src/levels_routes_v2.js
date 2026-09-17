@@ -6,16 +6,10 @@ const dist=(a,b)=>Math.hypot(b[0]-a[0],b[1]-a[1]);
 const round=p=>[+p[0].toFixed(3),+p[1].toFixed(3)];
 
 function cloneLevel(level){
-  return {...level,network:{...level.network,nodes:level.network.nodes.map(n=>({...n})),edges:level.network.edges.map(e=>({...e})),boundary:[...level.network.boundary]},vehicles:level.vehicles.map(v=>({...v,route:{...v.route,points:v.route.points.map(p=>[...p])}}))};
+  return {...level,network:{...level.network,nodes:level.network.nodes.map(n=>({...n})),edges:level.network.edges.map(e=>({...e})),boundary:[...level.network.boundary]},vehicles:level.vehicles.map(v=>({...v,userData:{...(v.userData||{})},route:{...v.route,points:v.route.points.map(p=>[...p])}}))};
 }
 function nodeMap(network){return new Map(network.nodes.map(n=>[n.id,n]))}
 function adjacency(network){const a=new Map(network.nodes.map(n=>[n.id,[]]));for(const e of network.edges){a.get(e.a)?.push(e.b);a.get(e.b)?.push(e.a)}return a}
-function pathIds(network,start,end){
-  const adj=adjacency(network),q=[start],prev=new Map([[start,null]]);
-  while(q.length){const cur=q.shift();if(cur===end)break;for(const nx of adj.get(cur)||[])if(!prev.has(nx)){prev.set(nx,cur);q.push(nx)}}
-  if(!prev.has(end))return[];
-  const out=[];for(let c=end;c!=null;c=prev.get(c))out.push(c);return out.reverse();
-}
 function routeLength(points){let d=0;for(let i=1;i<points.length;i++)d+=dist(points[i-1],points[i]);return d}
 function direction(a,b){const dx=b[0]-a[0],dz=b[1]-a[1],l=Math.hypot(dx,dz)||1;return[dx/l,dz/l]}
 function normalRight(d){return[d[1],-d[0]]}
@@ -45,82 +39,104 @@ function buildLaneRoute(network,ids,lane=1.78){
 }
 
 function parseRoute(v){const s=String(v.route?.name||'').split('-');return[s[0],s[1]]}
-function hashId(s){let h=2166136261>>>0;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
-function routeStats(network,ids){
-  const map=nodeMap(network),pts=ids.map(id=>map.get(id)).filter(Boolean),dirs=[];
-  for(let i=1;i<pts.length;i++){const dx=pts[i].x-pts[i-1].x,dz=pts[i].z-pts[i-1].z,l=Math.hypot(dx,dz)||1;dirs.push([dx/l,dz/l])}
-  let turns=0,maneuver='straight';
-  for(let i=1;i<dirs.length;i++){
-    const a=dirs[i-1],b=dirs[i],dot=a[0]*b[0]+a[1]*b[1];
-    if(dot<.985){
-      turns++;
-      if(maneuver==='straight'){
-        const cross=a[1]*b[0]-a[0]*b[1];
-        maneuver=cross>0?'right':'left';
-      }
+function classifyTurn(map,prevId,junctionId,nextId){
+  const p=map.get(prevId),j=map.get(junctionId),n=map.get(nextId);if(!p||!j||!n)return'straight';
+  const a=direction([p.x,p.z],[j.x,j.z]),b=direction([j.x,j.z],[n.x,n.z]);
+  const dot=a[0]*b[0]+a[1]*b[1],cross=a[1]*b[0]-a[0]*b[1];
+  if(dot>.86)return'straight';
+  return cross>0?'right':'left';
+}
+function nearestBoundaryPath(network,start,blocked,forbiddenBoundary){
+  const adj=adjacency(network),boundary=new Set((network.boundary||[]).filter(x=>x!==forbiddenBoundary)),q=[start],prev=new Map([[start,null]]);
+  let end=boundary.has(start)?start:null;
+  while(q.length&&!end){
+    const cur=q.shift();
+    for(const nx of adj.get(cur)||[]){
+      if(nx===blocked||prev.has(nx))continue;
+      prev.set(nx,cur);
+      if(boundary.has(nx)){end=nx;break}
+      q.push(nx);
     }
   }
-  const junctions=ids.filter(id=>String(id).startsWith('I')).length;
-  return{turns,junctions,segments:Math.max(0,ids.length-1),maneuver};
+  if(!end)return null;
+  const out=[];for(let c=end;c!=null;c=prev.get(c))out.push(c);return out.reverse();
 }
-function routeOptions(network,src){
-  const options=(network.boundary||[]).filter(dst=>dst!==src).map(dst=>{
-    const ids=pathIds(network,src,dst);if(ids.length<2)return null;
-    return{dst,ids,...routeStats(network,ids)};
-  }).filter(Boolean);
-  if(!options.length)return[];
-
-  let pool=options.filter(o=>o.turns<=1&&o.junctions<=3);
-  if(!pool.length)pool=options.filter(o=>o.turns<=1);
-  if(!pool.length){
-    const bestTurns=Math.min(...options.map(o=>o.turns));
-    pool=options.filter(o=>o.turns===bestTurns);
+function firstBranch(network,src){
+  const adj=adjacency(network),prefix=[src];
+  let prev=null,cur=src;
+  for(let guard=0;guard<32;guard++){
+    const nexts=(adj.get(cur)||[]).filter(x=>x!==prev);
+    if(cur!==src&&nexts.length>=2)return{prefix,prev,junction:cur,nexts};
+    if(!nexts.length)return null;
+    const nx=nexts[0];prev=cur;cur=nx;prefix.push(cur);
+    if((network.boundary||[]).includes(cur)&&cur!==src)return null;
   }
-  pool.sort((a,b)=>a.turns-b.turns||a.junctions-b.junctions||a.segments-b.segments||String(a.dst).localeCompare(String(b.dst)));
-  return pool;
+  return null;
+}
+function branchOptions(network,src){
+  const br=firstBranch(network,src),map=nodeMap(network);
+  if(!br)return[];
+  const out=[];
+  for(const nx of br.nexts){
+    const tail=nearestBoundaryPath(network,nx,br.junction,src);if(!tail)continue;
+    const ids=[...br.prefix,...tail];
+    const maneuver=classifyTurn(map,br.prev,br.junction,nx);
+    out.push({maneuver,ids,dst:ids[ids.length-1],segments:ids.length-1});
+  }
+  out.sort((a,b)=>a.segments-b.segments||String(a.dst).localeCompare(String(b.dst)));
+  return out;
+}
+function fallbackRoute(network,src,preferredDst){
+  const adj=adjacency(network),q=[src],prev=new Map([[src,null]]),target=preferredDst&&preferredDst!==src?preferredDst:(network.boundary||[]).find(x=>x!==src);
+  if(!target)return null;
+  while(q.length){const cur=q.shift();if(cur===target)break;for(const nx of adj.get(cur)||[])if(!prev.has(nx)){prev.set(nx,cur);q.push(nx)}}
+  if(!prev.has(target))return null;
+  const ids=[];for(let c=target;c!=null;c=prev.get(c))ids.push(c);ids.reverse();
+  return{maneuver:'straight',ids,dst:target,segments:ids.length-1};
 }
 function assignRoutesForSource(level,src,group){
-  const options=routeOptions(level.network,src);if(!options.length)return;
-  const by=new Map();
-  for(const o of options){if(!by.has(o.maneuver))by.set(o.maneuver,[]);by.get(o.maneuver).push(o)}
-  const preferredOrder=['left','straight','right'].filter(k=>by.has(k));
-  const classes=preferredOrder.length?preferredOrder:[...by.keys()];
-  const offset=classes.length?hashId(`${level.number||0}:${src}`)%classes.length:0;
-  const usage=new Map();
+  let options=branchOptions(level.network,src);
+  if(!options.length){const f=fallbackRoute(level.network,src,parseRoute(group[0]||{})[1]);if(f)options=[f]}
+  if(!options.length)return;
+
+  const by=new Map();for(const o of options){if(!by.has(o.maneuver))by.set(o.maneuver,[]);by.get(o.maneuver).push(o)}
+  const classOrder=['left','straight','right'].filter(k=>by.has(k));
+  const classes=classOrder.length?classOrder:[...by.keys()];
+  const classUse=new Map(),routeUse=new Map();
   group.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
 
   for(let i=0;i<group.length;i++){
-    const v=group[i],cls=classes[(i+offset)%classes.length],choices=by.get(cls)||options;
-    choices.sort((a,b)=>(usage.get(a.dst)||0)-(usage.get(b.dst)||0)||a.junctions-b.junctions||a.segments-b.segments);
-    const choice=choices[0]||options[i%options.length];
-    usage.set(choice.dst,(usage.get(choice.dst)||0)+1);
+    // Always pick the least-used manoeuvre first. This explicitly prevents a queue
+    // of 4-5 cars from all receiving the same arrow when alternatives exist.
+    const cls=[...classes].sort((a,b)=>(classUse.get(a)||0)-(classUse.get(b)||0)||classes.indexOf(a)-classes.indexOf(b))[0];
+    const choices=[...(by.get(cls)||options)].sort((a,b)=>(routeUse.get(a.dst)||0)-(routeUse.get(b.dst)||0)||a.segments-b.segments);
+    const choice=choices[0];
+    classUse.set(cls,(classUse.get(cls)||0)+1);routeUse.set(choice.dst,(routeUse.get(choice.dst)||0)+1);
+    const v=group[i];
     v.route={name:`${src}-${choice.dst}`,points:buildLaneRoute(level.network,choice.ids,1.78)};
     v.userData={...(v.userData||{}),routeManeuver:choice.maneuver};
   }
 }
 
 function extendBusyEntries(level){
-  const groups=new Map();
-  for(const v of level.vehicles){const[src]=parseRoute(v);if(!src)continue;if(!groups.has(src))groups.set(src,[]);groups.get(src).push(v)}
+  const groups=new Map();for(const v of level.vehicles){const[src]=parseRoute(v);if(!src)continue;if(!groups.has(src))groups.set(src,[]);groups.get(src).push(v)}
   const map=nodeMap(level.network),adj=adjacency(level.network);
   for(const[src,group]of groups){
     const b=map.get(src),nextId=(adj.get(src)||[])[0],j=map.get(nextId);if(!b||!j)continue;
-    const longest=Math.max(...group.map(v=>vLength(v.type))),needed=3.0+Math.max(0,group.length-1)*(longest+1.15)+6.3,current=Math.hypot(b.x-j.x,b.z-j.z);
+    const longest=Math.max(...group.map(v=>vLength(v.type))),needed=3+Math.max(0,group.length-1)*(longest+1.05)+6,current=Math.hypot(b.x-j.x,b.z-j.z);
     if(current>=needed)continue;
-    const dx=(b.x-j.x)/(current||1),dz=(b.z-j.z)/(current||1),extra=Math.min(10,needed-current);
+    const dx=(b.x-j.x)/(current||1),dz=(b.z-j.z)/(current||1),extra=Math.min(11,needed-current);
     b.x=+(b.x+dx*extra).toFixed(2);b.z=+(b.z+dz*extra).toFixed(2);
   }
 }
 function rebuildLevel(level){
   extendBusyEntries(level);
-  const groups=new Map();
-  for(const v of level.vehicles){const[src]=parseRoute(v);if(!src)continue;if(!groups.has(src))groups.set(src,[]);groups.get(src).push(v)}
+  const groups=new Map();for(const v of level.vehicles){const[src]=parseRoute(v);if(!src)continue;if(!groups.has(src))groups.set(src,[]);groups.get(src).push(v)}
   for(const [src,group] of groups)assignRoutesForSource(level,src,group);
-
   for(const group of groups.values()){
     group.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
-    let along=3.0;
-    for(const v of group){const len=routeLength(v.route.points);v.start=+Math.min(.42,along/Math.max(1,len)).toFixed(4);along+=vLength(v.type)+1.15}
+    let along=2.7;
+    for(const v of group){const len=Math.max(1,routeLength(v.route.points));v.start=+Math.min(.45,along/len).toFixed(4);along+=vLength(v.type)+.95}
   }
   return level;
 }
