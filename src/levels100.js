@@ -14,6 +14,8 @@ const VEHICLE_LENGTH={fire:4.15,truck:3.7,flatbed:3.7,delivery:3.7,ambulance:3.5
 const vLength=t=>VEHICLE_LENGTH[t]||2.95;
 function routeLength(points){let d=0;for(let i=1;i<(points?.length||0);i++)d+=Math.hypot(points[i][0]-points[i-1][0],points[i][1]-points[i-1][1]);return d}
 function sourceOf(v){return String(v.route?.name||'').split('-')[0]||'X'}
+function routeKey(v){return String(v.route?.name||'none')}
+function maneuverOf(v){return v.userData?.routeManeuver||'straight'}
 function targetVehicles(n){
   if(n<=3)return 5;
   if(n<=7)return 6;
@@ -30,48 +32,53 @@ function targetVehicles(n){
 }
 
 function strengthenLevel(level,n){
-  const vehicles=(level.vehicles||[]).map(v=>({...v,route:{...v.route,points:(v.route?.points||[]).map(p=>[...p])}}));
+  const vehicles=(level.vehicles||[]).map(v=>({...v,userData:{...(v.userData||{})},route:{...v.route,points:(v.route?.points||[]).map(p=>[...p])}}));
   const boundaryCount=Math.max(1,level.network?.boundary?.length||1);
-  const target=Math.min(25,boundaryCount*3,targetVehicles(n));
+  const capacity=Math.max(8,boundaryCount*4);
+  const target=Math.min(25,capacity,targetVehicles(n));
   if(!vehicles.length)return {...level,vehicles};
 
-  // Add cars to the least-populated entrances first. This creates several queues
-  // converging on the same junctions, which makes tap order matter without making
-  // any individual car snake through multiple turns.
-  const sourceCounts=new Map();
-  for(const v of vehicles)sourceCounts.set(sourceOf(v),(sourceCounts.get(sourceOf(v))||0)+1);
+  const sourceCounts=new Map(),maneuverUse=new Map(),routeUse=new Map();
+  const bump=(map,key)=>map.set(key,(map.get(key)||0)+1);
+  for(const v of vehicles){
+    const s=sourceOf(v);bump(sourceCounts,s);bump(maneuverUse,`${s}|${maneuverOf(v)}`);bump(routeUse,`${s}|${routeKey(v)}`);
+  }
+
   let extra=0;
   while(vehicles.length<target){
-    const candidates=[...vehicles].sort((a,b)=>{
-      const ca=sourceCounts.get(sourceOf(a))||0,cb=sourceCounts.get(sourceOf(b))||0;
-      if(ca!==cb)return ca-cb;
-      return String(a.id).localeCompare(String(b.id));
-    });
-    const base=candidates[(n*7+extra*3)%Math.min(candidates.length,Math.max(1,boundaryCount*2))]||candidates[0];
-    const src=sourceOf(base),clone={...base,route:{...base.route,points:base.route.points.map(p=>[...p])}};
+    const sources=[...new Set(vehicles.map(sourceOf))].sort((a,b)=>(sourceCounts.get(a)||0)-(sourceCounts.get(b)||0)||a.localeCompare(b));
+    const minCount=sourceCounts.get(sources[0])||0;
+    const tied=sources.filter(s=>(sourceCounts.get(s)||0)<=minCount+1);
+    const src=tied[(n+extra)%tied.length]||sources[0];
+    const variants=vehicles.filter(v=>sourceOf(v)===src);
+
+    const classes=[...new Set(variants.map(maneuverOf))].sort((a,b)=>(maneuverUse.get(`${src}|${a}`)||0)-(maneuverUse.get(`${src}|${b}`)||0)||a.localeCompare(b));
+    const cls=classes[0]||'straight';
+    const classVariants=variants.filter(v=>maneuverOf(v)===cls);
+    classVariants.sort((a,b)=>(routeUse.get(`${src}|${routeKey(a)}`)||0)-(routeUse.get(`${src}|${routeKey(b)}`)||0)||String(a.id).localeCompare(String(b.id)));
+    const base=classVariants[0]||variants[0]||vehicles[0];
+
+    const clone={...base,userData:{...(base.userData||{})},route:{...base.route,points:base.route.points.map(p=>[...p])}};
     clone.id=`${base.id}_P${n}_${extra}`;
     clone.color=COLORS[(n*5+extra*7)%COLORS.length];
-    clone.speed=+(base.speed*(1+Math.min(.16,Math.max(0,n-8)*.0032))).toFixed(2);
+    clone.speed=+(base.speed*(1+Math.min(.18,Math.max(0,n-8)*.0035))).toFixed(2);
     vehicles.push(clone);
-    sourceCounts.set(src,(sourceCounts.get(src)||0)+1);
+    bump(sourceCounts,src);bump(maneuverUse,`${src}|${maneuverOf(clone)}`);bump(routeUse,`${src}|${routeKey(clone)}`);
     extra++;
   }
 
-  // Also raise the original cars' pace gradually after the tutorial levels.
-  const pace=1+Math.min(.16,Math.max(0,n-8)*.0032);
+  const pace=1+Math.min(.18,Math.max(0,n-8)*.0035);
   for(let i=0;i<vehicles.length-extra;i++)vehicles[i].speed=+(vehicles[i].speed*pace).toFixed(2);
 
-  // Re-space each entrance queue after adding cars. The cap keeps every vehicle
-  // before the first junction while still allowing three cars per approach road.
   const groups=new Map();
   for(const v of vehicles){const s=sourceOf(v);if(!groups.has(s))groups.set(s,[]);groups.get(s).push(v)}
   for(const group of groups.values()){
     group.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
-    let along=2.6;
+    let along=2.55;
     for(const v of group){
       const len=Math.max(1,routeLength(v.route?.points));
-      v.start=+Math.min(.45,along/len).toFixed(4);
-      along+=vLength(v.type)+1.0;
+      v.start=+Math.min(.46,along/len).toFixed(4);
+      along+=vLength(v.type)+.92;
     }
   }
 
