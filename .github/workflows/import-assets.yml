@@ -1,0 +1,33 @@
+name: Import game assets
+on:
+  push:
+    paths:
+      - '.github/workflows/import-assets.yml'
+permissions:
+  contents: write
+jobs:
+  import-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and select Kenney assets
+        run: |
+          set -e
+          mkdir -p /tmp/assets assets/vehicles assets/roads
+          curl -L --fail 'https://kenney.nl/media/pages/assets/car-kit/1a312ec241-1775131960/kenney_car-kit.zip' -o /tmp/assets/cars.zip
+          curl -L --fail 'https://kenney.nl/media/pages/assets/city-kit-roads/74288c9459-1787042796/kenney_city-kit-roads.zip' -o /tmp/assets/roads.zip
+          unzip -q /tmp/assets/cars.zip -d /tmp/assets/cars
+          unzip -q /tmp/assets/roads.zip -d /tmp/assets/roads
+          C='/tmp/assets/cars/Models/GLB format'
+          R='/tmp/assets/roads/Models/GLB format'
+          for f in sedan suv taxi van ambulance police firetruck hatchback-sports sedan-sports truck; do cp "$C/$f.glb" "assets/vehicles/$f.glb"; done
+          for f in road-crossroad road-straight road-intersection road-crossing traffic-light light-square road-sign-stop; do cp "$R/$f.glb" "assets/roads/$f.glb"; done
+          printf 'Kenney Car Kit and City Kit (Roads) - CC0\nhttps://kenney.nl/assets/car-kit\nhttps://kenney.nl/assets/city-kit-roads\n' > assets/KENNEY_LICENSE.txt
+      - name: Commit selected runtime assets
+        run: |
+          git config user.name 'KARAGAMESTUDIO Asset Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add assets
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add optimized Kenney GLB runtime assets'
+          git push
