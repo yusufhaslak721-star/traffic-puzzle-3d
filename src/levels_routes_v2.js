@@ -39,7 +39,9 @@ function buildLaneRoute(network,ids,lane=1.78){
     const exit=[c[0]+dout[0]*r+nout[0]*lane,c[1]+dout[1]*r+nout[1]*lane];
     const control=[c[0]+(nin[0]+nout[0])*lane,c[1]+(nin[1]+nout[1])*lane];
     addLine(out,out[out.length-1],approach);
-    for(const t of[.18,.36,.54,.72,.9,1])addPoint(out,quad(approach,control,exit,t));
+    // Keep the actual Catmull-Rom drive smooth, but expose a clear heading change in the
+    // route control points so the roof arrow can correctly say straight/left/right.
+    for(const t of[.5,1])addPoint(out,quad(approach,control,exit,t));
   }
   const last=centers.length-1,nl=normalRight(dirs[dirs.length-1]),end=[centers[last][0]+nl[0]*lane,centers[last][1]+nl[1]*lane];
   addLine(out,out[out.length-1],end);
