@@ -43,11 +43,11 @@ function stylizeVehicleGroup(group,v){
         transparent:!!m.transparent,
         opacity:m.opacity??1,
         side:m.side??THREE.FrontSide,
-        roughness:isWheel?.9:(isGlass?.07:.28),
-        metalness:isWheel?.45:(isGlass?0:.16),
-        clearcoat:isWheel?0:.95,
-        clearcoatRoughness:isWheel?1:.13,
-        envMapIntensity:isWheel?.28:(isGlass?1.15:.75)
+        roughness:isWheel ? .9 : (isGlass ? .07 : .28),
+        metalness:isWheel ? .45 : (isGlass ? 0 : .16),
+        clearcoat:isWheel ? 0 : .95,
+        clearcoatRoughness:isWheel ? 1 : .13,
+        envMapIntensity:isWheel ? .28 : (isGlass ? 1.15 : .75)
       });
       if(isGlass){
         mm.color=new THREE.Color(0x9fc6df);
