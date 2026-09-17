@@ -1,10 +1,6 @@
 import * as THREE from 'three';
-import {createEnvironment as createBaseEnvironment} from './environment_v4.js';
+import {createEnvironment as createBaseEnvironment} from './environment_base.js';
 
-// Only intersections define the "play area" the camera must frame tightly.
-// Vehicle spawn points can sit far out at the map boundary; forcing every
-// single one of them into view was what pushed the camera back and shrank
-// the cars. Spawns are allowed to enter from just off-screen instead.
 function focusPoint(level){
   const pts=[];
   for(const n of level?.network?.nodes||[])if(n.intersection)pts.push(new THREE.Vector3(n.x,0,n.z));
@@ -26,10 +22,6 @@ function tightenCamera(level,camera){
   const target=focusPoint(level);
   const base=camera.position.clone();
   const delta=base.clone().sub(target);
-  // Only zoom IN from the base framing computed by environment_v4's
-  // fitCamera (s<1). We never zoom further OUT than that base shot, so a
-  // level with many vehicles can no longer push the camera back and make
-  // the cars tiny.
   const attempts=[.6,.66,.72,.78,.84,.9,.96,1];
   for(const s of attempts){
     camera.position.copy(target).addScaledVector(delta,s);

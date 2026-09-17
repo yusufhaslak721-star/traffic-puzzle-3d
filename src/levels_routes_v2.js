@@ -1,4 +1,4 @@
-import {levels as sourceLevels} from './levels100.js';
+import {levels as sourceLevels} from './levels_base.js';
 
 const VEHICLE_LENGTH={fire:4.15,truck:3.7,flatbed:3.7,delivery:3.7,ambulance:3.5,van:3.5,tractor:3.5,suv:3.15,luxury:3.15};
 const vLength=t=>VEHICLE_LENGTH[t]||2.95;
@@ -34,8 +34,6 @@ function buildLaneRoute(network,ids,lane=1.78){
     if(dot>.985){
       const target=[c[0]+nin[0]*lane,c[1]+nin[1]*lane];addLine(out,out[out.length-1],target);continue;
     }
-    // Enter the junction straight, turn on a compact radius, and exit straight.
-    // Dense samples keep Three.js CatmullRom from cutting corners or zig-zagging.
     const r=3.15;
     const approach=[c[0]-din[0]*r+nin[0]*lane,c[1]-din[1]*r+nin[1]*lane];
     const exit=[c[0]+dout[0]*r+nout[0]*lane,c[1]+dout[1]*r+nout[1]*lane];
