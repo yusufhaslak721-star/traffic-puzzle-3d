@@ -1,3 +1,4 @@
 import './premium_vehicle_redirect.js';
-import './main_final.js';
-import './crash_hold.js';
+await import('./main_final.js');
+await import('./ambient_audio.js');
+await import('./crash_hold.js');
