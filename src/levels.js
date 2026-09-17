@@ -41,7 +41,7 @@ export const levels=[
     V('b','race',C.pink,R.southEast,.04,6.2),
     V('c','luxury',C.purple,R.westSouth,.04,5.1),
     V('d','taxi',C.yellow,R.northEast,.04,5.0),
-    V('e','sedan',C.cyan,R.eastNorth,.16,5.3)
+    V('e','sedan',C.cyan,R.eastNorth,.18,5.3)
   ]},
   {name:'Hastane Yolu',theme:'hospital',vehicles:[
     V('a','ambulance',C.white,R.eastWest,.04,5.9),
@@ -63,8 +63,8 @@ export const levels=[
     V('b','flatbed',C.orange,R.eastWest,.04,4.0),
     V('c','future',C.cyan,R.northWest,.04,6.25),
     V('d','ambulance',C.white,R.westSouth,.04,5.9),
-    V('e','police',C.white,R.eastNorth,.16,6.1),
-    V('f','luxury',C.purple,R.southEast,.16,5.0),
+    V('e','police',C.white,R.eastNorth,.19,6.1),
+    V('f','luxury',C.purple,R.southEast,.19,5.0),
     V('g','hatch',C.green,R.westEast,.16,5.3)
   ]},
   {name:'Dar Sıra',theme:'city',vehicles:[
@@ -108,9 +108,9 @@ export const levels=[
     V('e','fire',C.red,R.eastWest,.03,5.6),
     V('f','future',C.cyan,R.southWest,.03,6.3),
     V('g','race',C.lime,R.westNorth,.29,6.25),
-    V('h','luxury',C.purple,R.eastSouth,.16,5.0),
+    V('h','luxury',C.purple,R.eastSouth,.18,5.0),
     V('i','truck',C.orange,R.southNorth,.16,4.0),
     V('j','taxi',C.yellow,R.northEast,.29,5.0),
-    V('k','suv',C.blue,R.eastNorth,.29,5.0)
+    V('k','suv',C.blue,R.eastNorth,.33,5.0)
   ]}
 ];
