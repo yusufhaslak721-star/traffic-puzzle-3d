@@ -1,12 +1,10 @@
 import * as THREE from 'three';
 
-// Continuous world-mapped CC0 AmbientCG road surfaces. The UVs are derived
-// from world X/Z coordinates, so adjoining road pieces share the same texture
-// phase instead of looking like separate stickers pasted together.
+// CC0 AmbientCG road/concrete surfaces.
 const ASPHALT='https://raw.githubusercontent.com/petroulacl/fps-buildings-env-kit/main/environment/ground-textures/ambientcg/Asphalt021_2K-JPG/Asphalt021_2K-JPG_Color.jpg';
 const CONCRETE='https://raw.githubusercontent.com/petroulacl/fps-buildings-env-kit/main/environment/ground-textures/ambientcg/Concrete012_2K-JPG/Concrete012_2K-JPG_Color.jpg';
 
-function loadTexture(url){
+function prepareTexture(url){
   const t=new THREE.TextureLoader().load(url,tex=>{
     tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
     tex.anisotropy=4;
@@ -17,46 +15,50 @@ function loadTexture(url){
   t.colorSpace=THREE.SRGBColorSpace;
   return t;
 }
+const asphaltMap=prepareTexture(ASPHALT);
+const concreteMap=prepareTexture(CONCRETE);
 
-const asphaltMap=loadTexture(ASPHALT);
-const concreteMap=loadTexture(CONCRETE);
+function worldPlane(width,length,material,cx,cz,rot=0,repeat=5.6){
+  const g=new THREE.PlaneGeometry(width,length,1,1);
+  const uv=g.attributes.uv;
+  const c=Math.cos(rot),s=Math.sin(rot);
+  for(let i=0;i<uv.count;i++){
+    const lx=(uv.getX(i)-.5)*width, lz=(uv.getY(i)-.5)*length;
+    const wx=cx+lx*c+lz*s, wz=cz-lx*s+lz*c;
+    uv.setXY(i,wx/repeat,wz/repeat);
+  }
+  const m=new THREE.Mesh(g,material);
+  m.rotation.x=-Math.PI/2;
+  m.rotation.z=-rot;
+  m.position.set(cx,0,cz);
+  m.receiveShadow=true;
+  return m;
+}
 
 export function createPremiumRoads(world){
   const root=new THREE.Group();
-  root.name='premium-road-layer-v5';
+  root.name='premium-road-layer-v6';
 
-  const asphaltMat=new THREE.MeshStandardMaterial({color:0xf0efec,map:asphaltMap,roughness:.89,metalness:.006,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
-  const wetMat=new THREE.MeshStandardMaterial({color:0xd8e0e5,map:asphaltMap,roughness:.34,metalness:.10,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
-  const concreteMat=new THREE.MeshStandardMaterial({color:0xe0dbd2,map:concreteMap,roughness:.94,metalness:0});
-  const curbMat=new THREE.MeshStandardMaterial({color:0xc8c4bb,roughness:.92});
-  const whiteMat=new THREE.MeshStandardMaterial({color:0xf5f3ec,roughness:.7});
-  const yellowMat=new THREE.MeshStandardMaterial({color:0xf2c43e,roughness:.68});
-  const gutterMat=new THREE.MeshStandardMaterial({color:0x282c2f,roughness:.96});
+  const asphaltMat=new THREE.MeshStandardMaterial({color:0xf0efec,map:asphaltMap,roughness:.89,metalness:.006});
+  const wetMat=new THREE.MeshStandardMaterial({color:0xd7dfe4,map:asphaltMap,roughness:.34,metalness:.10});
+  const concreteMat=new THREE.MeshStandardMaterial({color:0xe1ddd5,map:concreteMap,roughness:.94,metalness:0});
+  const whiteMat=new THREE.MeshStandardMaterial({color:0xf7f5ed,roughness:.68});
+  const yellowMat=new THREE.MeshStandardMaterial({color:0xf1c341,roughness:.66});
+  const drainMat=new THREE.MeshStandardMaterial({color:0x2b2e30,roughness:.95});
 
-  const ROAD_W=9.55, WALK_W=.92, TEX_SCALE=5.6;
+  const ROAD_W=9.55, SHOULDER_W=11.35, JUNCTION_W=10.15, JUNCTION_SHOULDER=11.55;
   const nodeMap=level=>new Map((level?.network?.nodes||[]).map(n=>[n.id,n]));
   function degree(level,id){let d=0;for(const e of level?.network?.edges||[])if(e.a===id||e.b===id)d++;return d}
-  function connected(level,id){
+  const isJunction=(level,id)=>degree(level,id)>=3;
+  function directions(level,id){
     const m=nodeMap(level),n=m.get(id),out=[];if(!n)return out;
     for(const e of level?.network?.edges||[]){
-      const o=e.a===id?m.get(e.b):e.b===id?m.get(e.a):null;
-      if(o)out.push(o);
+      const other=e.a===id?m.get(e.b):e.b===id?m.get(e.a):null;
+      if(!other)continue;
+      const dx=other.x-n.x,dz=other.z-n.z;
+      out.push(Math.abs(dx)>Math.abs(dz)?(dx>0?'E':'W'):(dz>0?'S':'N'));
     }
     return out;
-  }
-  function directions(level,id){
-    const m=nodeMap(level),n=m.get(id);if(!n)return[];
-    return connected(level,id).map(o=>{
-      const dx=o.x-n.x,dz=o.z-n.z;
-      return Math.abs(dx)>Math.abs(dz)?(dx>0?'E':'W'):(dz>0?'S':'N');
-    });
-  }
-  function isBend(level,id){
-    if(degree(level,id)!==2)return false;
-    const m=nodeMap(level),n=m.get(id),c=connected(level,id);if(!n||c.length!==2)return false;
-    const a=[c[0].x-n.x,c[0].z-n.z],b=[c[1].x-n.x,c[1].z-n.z];
-    const al=Math.hypot(...a)||1,bl=Math.hypot(...b)||1;
-    return Math.abs((a[0]/al)*(b[0]/bl)+(a[1]/al)*(b[1]/bl))<.25;
   }
 
   function hideBaseRoads(){
@@ -64,105 +66,61 @@ export function createPremiumRoads(world){
     world.traverse(o=>{
       if(!o.isMesh||root.getObjectById(o.id))return;
       const mats=Array.isArray(o.material)?o.material:[o.material];
-      const hit=mats.some(m=>m?.color&&colors.has(m.color.getHex()));
-      if(!hit)return;
+      if(!mats.some(m=>m?.color&&colors.has(m.color.getHex())))return;
       const s=new THREE.Box3().setFromObject(o).getSize(new THREE.Vector3());
       if(s.y<.9&&Math.max(s.x,s.z)>.7)o.visible=false;
     });
   }
 
-  function quad(points,y,material,uvScale=TEX_SCALE){
-    const pos=[],uv=[];
-    for(const [x,z] of points){pos.push(x,y,z);uv.push(x/uvScale,z/uvScale)}
-    const geo=new THREE.BufferGeometry();
-    geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
-    geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
-    geo.setIndex([0,1,2,0,2,3]);
-    geo.computeVertexNormals();
-    const m=new THREE.Mesh(geo,material);m.receiveShadow=true;root.add(m);return m;
+  function mark(g,w,d,mat,x,y,z){
+    const q=new THREE.Mesh(new THREE.BoxGeometry(w,.024,d),mat);
+    q.position.set(x,y,z);q.receiveShadow=true;g.add(q);return q;
   }
 
-  function ribbon(a,b,width,offset,y,material,uvScale=TEX_SCALE){
-    const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);if(len<.05)return null;
-    const nx=-dz/len,nz=dx/len,c1=[a.x+nx*offset,a.z+nz*offset],c2=[b.x+nx*offset,b.z+nz*offset],h=width/2;
-    return quad([
-      [c1[0]-nx*h,c1[1]-nz*h],
-      [c1[0]+nx*h,c1[1]+nz*h],
-      [c2[0]+nx*h,c2[1]+nz*h],
-      [c2[0]-nx*h,c2[1]-nz*h]
-    ],y,material,uvScale);
-  }
+  function segment(a,b,level){
+    const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);if(len<.4)return;
+    const ang=Math.atan2(dx,dz),cx=(a.x+b.x)/2,cz=(a.z+b.z)/2,wet=level.weather==='rain';
+    const g=new THREE.Group();g.position.set(cx,0,cz);g.rotation.y=ang;
 
-  function rect(cx,cz,w,d,y,material,uvScale=TEX_SCALE){
-    return quad([[cx-w/2,cz-d/2],[cx+w/2,cz-d/2],[cx+w/2,cz+d/2],[cx-w/2,cz+d/2]],y,material,uvScale);
-  }
+    // One continuous shoulder slab under the road. It runs node-centre to node-centre,
+    // so corners never leave disconnected beige blocks.
+    const shoulder=worldPlane(SHOULDER_W,len+.55,concreteMat,0,0,0,5.8);
+    shoulder.position.y=.205;g.add(shoulder);
+    const road=worldPlane(ROAD_W,len+.72,wet?wetMat:asphaltMat,0,0,0,5.8);
+    road.position.y=.232;g.add(road);
 
-  function mark(cx,cz,w,d,y,material,rot=0){
-    const q=new THREE.Mesh(new THREE.BoxGeometry(w,.024,d),material);q.position.set(cx,y,cz);q.rotation.y=rot;q.receiveShadow=true;root.add(q);return q;
-  }
-
-  function roadSegment(a,b,level){
-    const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz);if(len<.5)return;
-    const ux=dx/len,uz=dz/len,ang=Math.atan2(dx,dz),wet=level.weather==='rain';
-
-    // Asphalt runs continuously node-to-node. The global UV mapping means bends
-    // and intersections no longer restart the texture at every piece boundary.
-    ribbon(a,b,ROAD_W,0,.235,wet?wetMat:asphaltMat);
-    ribbon(a,b,.18,-(ROAD_W/2-.09),.246,gutterMat);
-    ribbon(a,b,.18, ROAD_W/2-.09,.246,gutterMat);
-    ribbon(a,b,WALK_W,-(ROAD_W/2+WALK_W/2+.10),.272,concreteMat,3.15);
-    ribbon(a,b,WALK_W, ROAD_W/2+WALK_W/2+.10,.272,concreteMat,3.15);
-    ribbon(a,b,.14,-(ROAD_W/2+.03),.312,curbMat,3.15);
-    ribbon(a,b,.14, ROAD_W/2+.03,.312,curbMat,3.15);
-
-    // Keep markings away from busy nodes so lines don't form ugly X shapes.
-    const trimA=degree(level,a.id)>=2?2.35:.45,trimB=degree(level,b.id)>=2?2.35:.45;
-    const usable=Math.max(0,len-trimA-trimB);
-    if(usable>.7){
-      const sx=a.x+ux*trimA,sz=a.z+uz*trimA;
-      const ex=b.x-ux*trimB,ez=b.z-uz*trimB;
-      for(let s=.8;s<usable-.4;s+=3.35){
-        const x=sx+ux*s,z=sz+uz*s;
-        mark(x-(-uz)*.11,z-(ux)*.11,.095,1.48,.265,yellowMat,ang);
-        mark(x+(-uz)*.11,z+(ux)*.11,.095,1.48,.265,yellowMat,ang);
-      }
-      for(const off of[-2.34,2.34])for(let s=1;s<usable-.4;s+=4.3){
-        const x=sx+ux*s+(-uz)*off,z=sz+uz*s+(ux)*off;
-        mark(x,z,.08,1.58,.263,whiteMat,ang);
-      }
-      // edge lines are continuous and make the carriageway read as one road.
-      ribbon({x:sx,z:sz},{x:ex,z:ez},.07,-4.30,.263,whiteMat,3.2);
-      ribbon({x:sx,z:sz},{x:ex,z:ez},.07, 4.30,.263,whiteMat,3.2);
+    for(const sx of[-1,1])mark(g,.12,len+.55,drainMat,sx*(ROAD_W/2-.04),.245,0);
+    for(let z=-len/2+.9;z<len/2-.45;z+=3.45){
+      mark(g,.09,1.5,yellowMat,-.11,.254,z);mark(g,.09,1.5,yellowMat,.11,.254,z);
     }
+    for(const x of[-2.34,2.34])for(let z=-len/2+1.0;z<len/2-.4;z+=4.35)mark(g,.075,1.6,whiteMat,x,.253,z);
+    mark(g,.065,len+.25,whiteMat,-4.28,.252,0);mark(g,.065,len+.25,whiteMat,4.28,.252,0);
+    root.add(g);
   }
 
-  function crosswalk(n,dir){
-    const cfg={N:[0,-3.65,0],S:[0,3.65,Math.PI],E:[3.65,0,-Math.PI/2],W:[-3.65,0,Math.PI/2]}[dir];
-    if(!cfg)return;
-    const [ox,oz,rot]=cfg;
-    mark(n.x+ox,n.z+oz,7.45,.15,.292,whiteMat,rot);
-    for(let i=-4;i<=4;i++)mark(n.x+ox+(dir==='N'||dir==='S'?i*.72:0),n.z+oz+(dir==='E'||dir==='W'?i*.72:0),.37,1.12,.294,whiteMat,rot);
+  function crosswalkArm(g,rot){
+    const r=new THREE.Group();
+    const z=-3.70;
+    mark(r,7.5,.15,whiteMat,0,.294,z-1.0);
+    for(let x=-3.28;x<=3.28;x+=.72)mark(r,.36,1.18,whiteMat,x,.297,z);
+    r.rotation.y=rot;g.add(r);
   }
 
-  function nodeJoin(n,level){
-    const d=degree(level,n.id),bend=isBend(level,n.id),wet=level.weather==='rain';
-    if(d<3&&!bend)return;
-    // This patch sits just below the incoming strips and uses the same world UVs,
-    // so it only fills the inner corner/hub without looking like a separate tile.
-    const size=d>=3?ROAD_W+.32:ROAD_W+.08;
-    rect(n.x,n.z,size,size,.231,wet?wetMat:asphaltMat);
+  function junction(n,level){
+    const wet=level.weather==='rain',g=new THREE.Group();g.position.set(n.x,0,n.z);
+    // Full underlay + asphalt overlay. Incoming segment slabs continue underneath,
+    // which removes the pasted/cut road corners completely.
+    const shoulder=worldPlane(JUNCTION_SHOULDER,JUNCTION_SHOULDER,concreteMat,0,0,0,5.8);
+    shoulder.position.y=.214;g.add(shoulder);
+    const surface=worldPlane(JUNCTION_W,JUNCTION_W,wet?wetMat:asphaltMat,0,0,0,5.8);
+    surface.position.y=.266;g.add(surface);
 
     const dirs=directions(level,n.id);
-    if(d>=3)for(const dir of dirs)crosswalk(n,dir);
-
-    // Small outside pavement corners soften L/T shapes without covering the road.
-    const corner=1.18,edge=ROAD_W/2+corner/2+.02;
-    const occupied=new Set(dirs);
-    const corners=[['N','E',1,-1],['E','S',1,1],['S','W',-1,1],['W','N',-1,-1]];
-    for(const [a,b,sx,sz] of corners){
-      if(occupied.has(a)&&occupied.has(b))continue;
-      rect(n.x+sx*edge,n.z+sz*edge,corner,corner,.276,concreteMat,3.15);
-    }
+    if(dirs.includes('N'))crosswalkArm(g,0);
+    if(dirs.includes('S'))crosswalkArm(g,Math.PI);
+    if(dirs.includes('E'))crosswalkArm(g,-Math.PI/2);
+    if(dirs.includes('W'))crosswalkArm(g,Math.PI/2);
+    root.add(g);
   }
 
   function build(level){
@@ -170,9 +128,8 @@ export function createPremiumRoads(world){
     if(root.parent!==world)world.add(root);
     hideBaseRoads();
     const m=nodeMap(level);
-    for(const e of level?.network?.edges||[]){const a=m.get(e.a),b=m.get(e.b);if(a&&b)roadSegment(a,b,level)}
-    for(const n of level?.network?.nodes||[])nodeJoin(n,level);
+    for(const e of level?.network?.edges||[]){const a=m.get(e.a),b=m.get(e.b);if(a&&b)segment(a,b,level)}
+    for(const n of level?.network?.nodes||[])if(isJunction(level,n.id))junction(n,level);
   }
-
   return{build,root};
 }
