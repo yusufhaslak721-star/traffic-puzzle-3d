@@ -40,6 +40,9 @@ function stylizeVehicleGroup(group,v){
       const mm=new THREE.MeshPhysicalMaterial({
         color:m.color?m.color.clone():new THREE.Color(0xffffff),
         map:m.map||null,
+        normalMap:m.normalMap||null,
+        roughnessMap:m.roughnessMap||null,
+        metalnessMap:m.metalnessMap||null,
         transparent:!!m.transparent,
         opacity:m.opacity??1,
         side:m.side??THREE.FrontSide,
@@ -49,6 +52,7 @@ function stylizeVehicleGroup(group,v){
         clearcoatRoughness:isWheel ? 1 : .13,
         envMapIntensity:isWheel ? .28 : (isGlass ? 1.15 : .75)
       });
+      if(mm.map)mm.map.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
       if(isGlass){
         mm.color=new THREE.Color(0x9fc6df);
         mm.transmission=.16;
@@ -84,6 +88,7 @@ function stylizeVehicleGroup(group,v){
 source=helpers+'\n'+source;
 
 source=source.replace("renderer.setPixelRatio(Math.min(devicePixelRatio,1.45));","renderer.setPixelRatio(Math.min(devicePixelRatio,1.65));");
+source=source.replace("renderer.toneMapping=THREE.ACESFilmicToneMapping;","renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.06;");
 source=source.replace("sun.shadow.mapSize.set(1536,1536)","sun.shadow.mapSize.set(2048,2048)");
 
 const oldManeuver="function routeManeuver(route){const p=route.points;if(!p||p.length<2)return'straight';for(let i=1;i<p.length-1;i++){let ax=p[i][0]-p[i-1][0],az=p[i][1]-p[i-1][1],bx=p[i+1][0]-p[i][0],bz=p[i+1][1]-p[i][1],al=Math.hypot(ax,az)||1,bl=Math.hypot(bx,bz)||1;ax/=al;az/=al;bx/=bl;bz/=bl;const dot=ax*bx+az*bz;if(dot<.82)return az*bx-ax*bz>0?'left':'right'}return'straight'}";
@@ -99,6 +104,16 @@ source=source.replace(oldArrow,newArrow);
 
 source=source.replace("addArrow(g,v.type,kind);return g}","addArrow(g,v.type,kind);stylizeVehicleGroup(g,v);return g}");
 source=source.replace("addArrow(outer,v.type,kind);return outer}","addArrow(outer,v.type,kind);stylizeVehicleGroup(outer,v);return outer}");
+
+const oldPlace="function place(v){const u=THREE.MathUtils.clamp(v.distance/v.length,0,.99999),p=v.curve.getPointAt(u),t=v.curve.getTangentAt(u);v.mesh.position.copy(p);v.mesh.rotation.y=Math.atan2(t.x,t.z)}";
+const newPlace="function place(v){const u=THREE.MathUtils.clamp(v.distance/v.length,0,.99999),p=v.curve.getPointAt(u),t=v.curve.getTangentAt(u),u2=Math.min(.99999,u+.012),t2=v.curve.getTangentAt(u2);const yaw=Math.atan2(t.x,t.z),yaw2=Math.atan2(t2.x,t2.z),turn=Math.atan2(Math.sin(yaw2-yaw),Math.cos(yaw2-yaw));v.mesh.position.copy(p);v.mesh.rotation.y=yaw;v._roll=THREE.MathUtils.lerp(v._roll||0,THREE.MathUtils.clamp(-turn*.22,-.035,.035),.18);v.mesh.rotation.z=v.state==='moving'?v._roll:0;if(v.state==='moving'){v._bob=(v._bob||0)+.34;v.mesh.position.y+=Math.sin(v._bob)*.012}}";
+if(source.includes(oldPlace))source=source.replace(oldPlace,newPlace);
+
+source=source.replace("v.sound={engine:o,engineGain:g};","v.sound={engine:o,engineGain:g,baseFreq:o.frequency.value};");
+const oldTick="function tick(dt,now){if(!running||failed)return;for(const v of vehicles){if(v.mesh.userData.flash){const on=Math.floor(now/220)%2===0;v.mesh.userData.flash[0].visible=on;v.mesh.userData.flash[1].visible=!on}v.prev=null;if(v.state!=='moving')continue;v.prev={p:v.mesh.position.clone(),r:v.mesh.rotation.y};v.distance+=v.speed*dt;if(v.distance>=v.length){v.distance=v.length;v.state='done';stopSound(v);v.mesh.visible=false;updateRemaining();continue}place(v)}const h=collision();if(h)return fail(h);if(vehicles.length&&vehicles.every(v=>v.state==='done'))win()}";
+const newTick="function tick(dt,now){if(!running||failed)return;for(const v of vehicles){if(v.mesh.userData.flash){const on=Math.floor(now/220)%2===0;v.mesh.userData.flash[0].visible=on;v.mesh.userData.flash[1].visible=!on}if(v.sound?.engine&&audioCtx&&v.sound.baseFreq){const rpm=1+.055*Math.sin(now*.008+v.distance*.16)+.035*Math.sin(now*.017);v.sound.engine.frequency.setTargetAtTime(v.sound.baseFreq*rpm,audioCtx.currentTime,.055)}v.prev=null;if(v.state!=='moving')continue;v.prev={p:v.mesh.position.clone(),r:v.mesh.rotation.y};v.distance+=v.speed*dt;if(v.distance>=v.length){v.distance=v.length;v.state='done';stopSound(v);v.mesh.visible=false;updateRemaining();continue}place(v)}const h=collision();if(h)return fail(h);if(vehicles.length&&vehicles.every(v=>v.state==='done'))win()}";
+if(source.includes(oldTick))source=source.replace(oldTick,newTick);
+
 source=source.replace("Math.min(100,+(localStorage.tp3dUnlocked||1))","Math.min(250,+(localStorage.tp3dUnlocked||1))");
 
 new Function('THREE','GLTFLoader','levels','createEnvironment',source)(THREE,GLTFLoader,levels,createEnvironment);
