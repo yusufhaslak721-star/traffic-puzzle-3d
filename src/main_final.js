@@ -19,7 +19,7 @@ source=source.replace(oldManeuver,newManeuver);
 source=source.replace("const maneuver=routeManeuver(d.route),mesh=fallback(d,maneuver)","const maneuver=routeManeuver(d.route,d.start||0),mesh=fallback(d,maneuver)");
 
 const oldArrow="function addArrow(g,type,kind){const h=type==='fire'?2.55:['truck','flatbed','delivery','ambulance','van','tractor'].includes(type)?2.3:['suv','luxury'].includes(type)?2.05:1.9,s=new THREE.Sprite(new THREE.SpriteMaterial({map:arrowTexture(kind),transparent:true,depthTest:false,depthWrite:false}));s.position.set(0,h+.58,0);s.scale.set(1.5,1.72,1);s.renderOrder=30;g.add(s);g.userData.arrow=s}";
-const newArrow="function addArrow(g,type,kind){const h=type==='fire'?2.55:['truck','flatbed','delivery','ambulance','van','tractor'].includes(type)?2.3:['suv','luxury'].includes(type)?2.05:1.9,geo=new THREE.PlaneGeometry(1.5,1.72),material=new THREE.MeshBasicMaterial({map:arrowTexture(kind),transparent:true,depthTest:false,depthWrite:false,side:THREE.DoubleSide}),s=new THREE.Mesh(geo,material);s.position.set(0,h+.62,0);s.rotation.set(-Math.PI/2,Math.PI,0);s.renderOrder=30;g.add(s);g.userData.arrow=s}";
+const newArrow="function addArrow(g,type,kind){const h=type==='fire'?2.55:['truck','flatbed','delivery','ambulance','van','tractor'].includes(type)?2.3:['suv','luxury'].includes(type)?2.05:1.9,geo=new THREE.PlaneGeometry(1.5,1.72),material=new THREE.MeshBasicMaterial({map:arrowTexture(kind),transparent:true,depthTest:false,depthWrite:false,side:THREE.DoubleSide}),s=new THREE.Mesh(geo,material);s.position.set(0,h+.62,0);s.rotation.x=Math.PI/2;s.renderOrder=30;g.add(s);g.userData.arrow=s}";
 if(!source.includes(oldArrow))throw new Error('addArrow patch target not found');
 source=source.replace(oldArrow,newArrow);
 
