@@ -1,42 +1,23 @@
 import * as THREE from 'three';
-import {createEnvironment as createBaseEnvironment} from 'https://cdn.jsdelivr.net/gh/yusufhaslak721-star/traffic-puzzle-3d@35c0685c1a0e90be161ebb68d6ea71db2b744c50/src/environment_v4.js';
+import {createEnvironment as createBaseEnvironment} from './environment_v4.js';
 
-function routeStartPoint(v){
-  const pts=v?.route?.points||[];
-  if(pts.length<2)return new THREE.Vector3();
-  const seg=[];let total=0;
-  for(let i=1;i<pts.length;i++){
-    const d=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);
-    seg.push(d);total+=d;
-  }
-  let target=THREE.MathUtils.clamp(v.start||0,0,1)*total;
-  for(let i=0;i<seg.length;i++){
-    if(target<=seg[i]||i===seg.length-1){
-      const t=seg[i]?target/seg[i]:0;
-      return new THREE.Vector3(
-        THREE.MathUtils.lerp(pts[i][0],pts[i+1][0],t),
-        .7,
-        THREE.MathUtils.lerp(pts[i][1],pts[i+1][1],t)
-      );
-    }
-    target-=seg[i];
-  }
-  return new THREE.Vector3(pts[0][0],.7,pts[0][1]);
-}
-
+// Only intersections define the "play area" the camera must frame tightly.
+// Vehicle spawn points can sit far out at the map boundary; forcing every
+// single one of them into view was what pushed the camera back and shrank
+// the cars. Spawns are allowed to enter from just off-screen instead.
 function focusPoint(level){
   const pts=[];
   for(const n of level?.network?.nodes||[])if(n.intersection)pts.push(new THREE.Vector3(n.x,0,n.z));
-  for(const v of level?.vehicles||[])pts.push(routeStartPoint(v));
   if(!pts.length)return new THREE.Vector3();
   return new THREE.Box3().setFromPoints(pts).getCenter(new THREE.Vector3());
 }
 
-function allStartsVisible(level,camera){
+function intersectionsVisible(level,camera){
   camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
-  for(const v of level?.vehicles||[]){
-    const p=routeStartPoint(v).clone().project(camera);
-    if(!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.z<-1||p.z>1||Math.abs(p.x)>.95||p.y<-.89||p.y>.89)return false;
+  for(const n of level?.network?.nodes||[]){
+    if(!n.intersection)continue;
+    const p=new THREE.Vector3(n.x,0,n.z).project(camera);
+    if(!Number.isFinite(p.x)||!Number.isFinite(p.y)||p.z<-1||p.z>1||Math.abs(p.x)>.82||p.y<-.78||p.y>.78)return false;
   }
   return true;
 }
@@ -45,19 +26,18 @@ function tightenCamera(level,camera){
   const target=focusPoint(level);
   const base=camera.position.clone();
   const delta=base.clone().sub(target);
-  const attempts=[
-    {s:.68,f:42},{s:.72,f:42},{s:.76,f:43},{s:.80,f:43},{s:.84,f:44},{s:.88,f:44},
-    {s:.92,f:45},{s:.96,f:45},{s:1.00,f:46},{s:1.06,f:47},{s:1.12,f:48}
-  ];
-  for(const a of attempts){
-    camera.fov=a.f;
-    camera.position.copy(target).addScaledVector(delta,a.s);
+  // Only zoom IN from the base framing computed by environment_v4's
+  // fitCamera (s<1). We never zoom further OUT than that base shot, so a
+  // level with many vehicles can no longer push the camera back and make
+  // the cars tiny.
+  const attempts=[.6,.66,.72,.78,.84,.9,.96,1];
+  for(const s of attempts){
+    camera.position.copy(target).addScaledVector(delta,s);
     camera.lookAt(target);
     camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
-    if(allStartsVisible(level,camera))return;
+    if(intersectionsVisible(level,camera))return;
   }
-  camera.fov=48;
-  camera.position.copy(target).addScaledVector(delta,1.12);
+  camera.position.copy(base);
   camera.lookAt(target);
   camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
 }
