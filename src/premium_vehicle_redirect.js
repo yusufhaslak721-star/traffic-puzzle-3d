@@ -44,31 +44,38 @@ function findBest(scene,tokenSets){
   return root.clone(true);
 }
 
-if(!GLTFLoader.prototype.__karagamePremiumRedirectV2){
-  GLTFLoader.prototype.__karagamePremiumRedirectV2=true;
+if(!GLTFLoader.prototype.__karagamePremiumRedirectV3){
+  GLTFLoader.prototype.__karagamePremiumRedirectV3=true;
   const originalLoad=GLTFLoader.prototype.load;
   let fleetPromise=null;
   const loadFleet=()=>fleetPromise||(fleetPromise=new Promise((resolve,reject)=>{
     const l=new GLTFLoader();originalLoad.call(l,FLEET,g=>resolve(g.scene),undefined,reject);
   }));
 
-  const wrap=(scene,name)=>{
-    const wrapper=new THREE.Group();scene.rotation.y=Math.PI;wrapper.add(scene);
-    wrapper.userData.premiumVehicle=true;wrapper.userData.premiumVehicleName=name;return wrapper;
+  // main_v4 normalizer rotates every loaded vehicle by PI because Kenney cars face -Z.
+  // Standalone premium models face +Z, so they need an inner PI to cancel that normalizer.
+  // Vehicles extracted from the fleet pack already follow the Kenney/-Z convention, so they MUST NOT be flipped here.
+  const wrap=(scene,name,cancelNormalizer)=>{
+    const wrapper=new THREE.Group();
+    if(cancelNormalizer)scene.rotation.y=Math.PI;
+    wrapper.add(scene);
+    wrapper.userData.premiumVehicle=true;
+    wrapper.userData.premiumVehicleName=name;
+    return wrapper;
   };
 
   GLTFLoader.prototype.load=function(url,onLoad,onProgress,onError){
     const s=String(url),direct=DIRECT.find(x=>x.test.test(s));
     const original=()=>originalLoad.call(this,url,onLoad,onProgress,onError);
     if(direct){
-      return originalLoad.call(this,direct.url,g=>{g.scene=wrap(g.scene,direct.name);onLoad?.(g)},onProgress,err=>{console.warn('Premium vehicle failed:',direct.name,err);original()});
+      return originalLoad.call(this,direct.url,g=>{g.scene=wrap(g.scene,direct.name,true);onLoad?.(g)},onProgress,err=>{console.warn('Premium vehicle failed:',direct.name,err);original()});
     }
     const spec=STARTER_SPECS.find(x=>x.test.test(s));
     if(!spec)return original();
     loadFleet().then(scene=>{
       const picked=findBest(scene,spec.tokens);
       if(!picked){console.warn('Premium fleet model not found:',spec.label);return original()}
-      onLoad?.({scene:wrap(picked,spec.label),animations:[]});
+      onLoad?.({scene:wrap(picked,spec.label,false),animations:[]});
     }).catch(err=>{console.warn('Premium fleet pack failed:',err);original()});
     return this;
   };
