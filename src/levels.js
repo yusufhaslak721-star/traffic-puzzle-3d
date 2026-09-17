@@ -5,8 +5,6 @@ const C={
 const route=(name,points)=>({name,points});
 const V=(id,type,color,route,start=0,speed=5.2)=>({id,type,color,route,start,speed});
 
-// Sağdan akan trafik. Aynı giriş kolundaki araçlar güvenli aralıklarla sıralanır.
-// Böylece hiçbir bölüm araçlar iç içe başlamaz; yön göstergeleri de üst üste binmez.
 const R={
   westEast:route('westEast',[[-18,2],[-7,2],[7,2],[18,2]]),
   eastWest:route('eastWest',[[18,-2],[7,-2],[-7,-2],[-18,-2]]),
@@ -25,92 +23,80 @@ const R={
 };
 
 export const levels=[
-  {name:'Isınma Turu',theme:'park',vehicles:[
+  {name:'Park Bulvarı',theme:'park',layout:'straightEW',vehicles:[
     V('a','sedan',C.red,R.westEast,.04,5.4),
-    V('b','hatch',C.blue,R.northEast,.04,5.3),
-    V('c','taxi',C.yellow,R.southNorth,.04,5.0)
+    V('b','hatch',C.blue,R.eastWest,.04,5.3),
+    V('c','taxi',C.yellow,R.westEast,.20,5.0)
   ]},
-  {name:'Dönüşler Başlıyor',theme:'shops',vehicles:[
+  {name:'Çarşı T Kavşağı',theme:'shops',layout:'tNorth',vehicles:[
     V('a','sports',C.green,R.westNorth,.04,6.0),
-    V('b','suv',C.blue,R.eastSouth,.04,5.0),
-    V('c','sedan',C.red,R.northSouth,.04,5.3),
-    V('d','taxi',C.yellow,R.southWest,.04,5.0)
+    V('b','suv',C.blue,R.eastNorth,.04,5.0),
+    V('c','taxi',C.yellow,R.northWest,.04,5.0),
+    V('d','sedan',C.red,R.westEast,.20,5.3)
   ]},
-  {name:'Şehir Akışı',theme:'city',vehicles:[
-    V('a','van',C.white,R.eastWest,.04,4.5),
-    V('b','race',C.pink,R.southEast,.04,6.2),
-    V('c','luxury',C.purple,R.westSouth,.04,5.1),
-    V('d','taxi',C.yellow,R.northEast,.04,5.0),
-    V('e','sedan',C.cyan,R.eastNorth,.18,5.3)
+  {name:'Mahalle Girişi',theme:'suburb',layout:'tSouth',vehicles:[
+    V('a','luxury',C.purple,R.westSouth,.04,5.1),
+    V('b','race',C.pink,R.eastSouth,.04,6.2),
+    V('c','taxi',C.yellow,R.southWest,.04,5.0),
+    V('d','sedan',C.cyan,R.eastWest,.20,5.3)
   ]},
-  {name:'Hastane Yolu',theme:'hospital',vehicles:[
-    V('a','ambulance',C.white,R.eastWest,.04,5.9),
-    V('b','sports',C.red,R.westNorth,.04,6.0),
-    V('c','suv',C.blue,R.southNorth,.04,5.0),
-    V('d','delivery',C.orange,R.northEast,.04,4.4),
-    V('e','taxi',C.yellow,R.westSouth,.16,5.0)
+  {name:'Hastane Köşesi',theme:'hospital',layout:'bendNE',vehicles:[
+    V('a','ambulance',C.white,R.northEast,.04,5.9),
+    V('b','sports',C.red,R.eastNorth,.04,6.0),
+    V('c','delivery',C.orange,R.northEast,.20,4.4),
+    V('d','taxi',C.yellow,R.eastNorth,.20,5.0)
   ]},
-  {name:'Yoğun Saat',theme:'city',vehicles:[
+  {name:'Şehir Merkezi',theme:'city',layout:'cross',vehicles:[
     V('a','police',C.white,R.westEast,.04,6.1),
     V('b','truck',C.orange,R.northSouth,.04,4.1),
     V('c','suv',C.blue,R.eastNorth,.04,5.0),
     V('d','race',C.lime,R.southWest,.04,6.2),
-    V('e','van',C.white,R.westNorth,.16,4.5),
-    V('f','taxi',C.yellow,R.eastWest,.16,5.0)
+    V('e','van',C.white,R.westNorth,.20,4.5),
+    V('f','taxi',C.yellow,R.eastWest,.20,5.0)
   ]},
-  {name:'İtfaiye Önceliği',theme:'shops',vehicles:[
-    V('a','fire',C.red,R.southNorth,.04,5.6),
-    V('b','flatbed',C.orange,R.eastWest,.04,4.0),
-    V('c','future',C.cyan,R.northWest,.04,6.25),
-    V('d','ambulance',C.white,R.westSouth,.04,5.9),
-    V('e','police',C.white,R.eastNorth,.19,6.1),
-    V('f','luxury',C.purple,R.southEast,.19,5.0),
-    V('g','hatch',C.green,R.westEast,.16,5.3)
+  {name:'Sanayi T Kavşağı',theme:'industrial',layout:'tWest',vehicles:[
+    V('a','fire',C.red,R.westNorth,.04,5.6),
+    V('b','flatbed',C.orange,R.northWest,.04,4.0),
+    V('c','tractor',C.green,R.southWest,.04,3.6),
+    V('d','ambulance',C.white,R.westSouth,.20,5.9),
+    V('e','luxury',C.purple,R.northSouth,.20,5.0),
+    V('f','hatch',C.cyan,R.southNorth,.20,5.3)
   ]},
-  {name:'Dar Sıra',theme:'city',vehicles:[
-    V('a','delivery',C.orange,R.westEast,.04,4.35),
-    V('b','sedan',C.red,R.westEast,.16,5.25),
-    V('c','race',C.cyan,R.northSouth,.04,6.2),
-    V('d','taxi',C.yellow,R.northSouth,.16,5.0),
-    V('e','suv',C.blue,R.eastNorth,.04,5.0),
-    V('f','van',C.white,R.southWest,.04,4.45),
-    V('g','police',C.white,R.eastWest,.16,6.1),
-    V('h','sports',C.pink,R.southNorth,.16,6.0)
+  {name:'Sahil Şeridi',theme:'seaside',layout:'straightNS',vehicles:[
+    V('a','future',C.cyan,R.northSouth,.04,6.25),
+    V('b','taxi',C.yellow,R.southNorth,.04,5.0),
+    V('c','delivery',C.orange,R.northSouth,.20,4.35),
+    V('d','sports',C.pink,R.southNorth,.20,6.0)
   ]},
-  {name:'Sanayi Kavşağı',theme:'industrial',vehicles:[
-    V('a','tractor',C.green,R.southNorth,.03,3.6),
-    V('b','truck',C.orange,R.southNorth,.16,4.0),
-    V('c','flatbed',C.blue,R.westSouth,.03,4.0),
-    V('d','delivery',C.red,R.eastNorth,.03,4.35),
-    V('e','future',C.cyan,R.northEast,.03,6.25),
-    V('f','luxury',C.purple,R.eastWest,.16,5.0),
-    V('g','ambulance',C.white,R.westEast,.16,5.9),
-    V('h','taxi',C.yellow,R.northWest,.16,5.0),
-    V('i','race',C.lime,R.eastSouth,.29,6.2)
+  {name:'Terminal Bağlantısı',theme:'terminal',layout:'tEast',vehicles:[
+    V('a','truck',C.blue,R.eastSouth,.04,4.0),
+    V('b','police',C.white,R.eastNorth,.20,6.1),
+    V('c','race',C.lime,R.northEast,.04,6.2),
+    V('d','van',C.white,R.southEast,.04,4.45),
+    V('e','taxi',C.yellow,R.northSouth,.20,5.0)
   ]},
-  {name:'Acil Koridor',theme:'hospital',vehicles:[
+  {name:'Acil Koridor',theme:'hospital',layout:'crossWide',vehicles:[
     V('a','ambulance',C.white,R.northSouth,.03,6.0),
     V('b','police',C.white,R.eastWest,.03,6.2),
     V('c','fire',C.red,R.westEast,.03,5.6),
-    V('d','delivery',C.orange,R.northSouth,.16,4.35),
-    V('e','suv',C.blue,R.eastNorth,.16,5.0),
+    V('d','delivery',C.orange,R.northSouth,.19,4.35),
+    V('e','suv',C.blue,R.eastNorth,.18,5.0),
     V('f','race',C.pink,R.southWest,.03,6.25),
-    V('g','flatbed',C.silver,R.westNorth,.16,4.0),
-    V('h','taxi',C.yellow,R.eastSouth,.29,5.0),
-    V('i','luxury',C.purple,R.southNorth,.16,5.0),
-    V('j','hatch',C.green,R.westEast,.29,5.3)
+    V('g','flatbed',C.silver,R.westNorth,.18,4.0),
+    V('h','taxi',C.yellow,R.eastSouth,.33,5.0),
+    V('i','luxury',C.purple,R.southNorth,.19,5.0)
   ]},
-  {name:'Usta Trafik',theme:'city',vehicles:[
+  {name:'Usta Trafik',theme:'plaza',layout:'cross',vehicles:[
     V('a','police',C.white,R.westEast,.03,6.2),
-    V('b','sedan',C.red,R.westEast,.16,5.3),
+    V('b','sedan',C.red,R.westEast,.19,5.3),
     V('c','ambulance',C.white,R.northSouth,.03,6.0),
-    V('d','delivery',C.orange,R.northSouth,.16,4.35),
+    V('d','delivery',C.orange,R.northSouth,.19,4.35),
     V('e','fire',C.red,R.eastWest,.03,5.6),
     V('f','future',C.cyan,R.southWest,.03,6.3),
-    V('g','race',C.lime,R.westNorth,.29,6.25),
-    V('h','luxury',C.purple,R.eastSouth,.18,5.0),
-    V('i','truck',C.orange,R.southNorth,.16,4.0),
-    V('j','taxi',C.yellow,R.northEast,.29,5.0),
-    V('k','suv',C.blue,R.eastNorth,.33,5.0)
+    V('g','race',C.lime,R.westNorth,.35,6.25),
+    V('h','luxury',C.purple,R.eastSouth,.19,5.0),
+    V('i','truck',C.orange,R.southNorth,.19,4.0),
+    V('j','taxi',C.yellow,R.northEast,.35,5.0),
+    V('k','suv',C.blue,R.eastNorth,.35,5.0)
   ]}
 ];
