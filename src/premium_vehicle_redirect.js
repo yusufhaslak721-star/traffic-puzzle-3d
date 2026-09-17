@@ -22,16 +22,15 @@ const STARTER_SPECS=[
   {test:/\/tractor\.glb(?:[?#]|$)/i,label:'4x4 utility vehicle',tokens:[['ladder','frame','4x4'],['boxy','off','roader'],['pickup']]}
 ];
 
+const PALETTE=[0x2f80ed,0xff4d4f,0xffb020,0x31c48d,0x8b5cf6,0xff6b9d,0x13b8a6,0xf97316,0x4f6bdc,0xb7d62b];
+let colorCursor=0;
 function clean(s){return String(s||'').toLowerCase().replace(/[_\-.]+/g,' ').replace(/\s+/g,' ').trim()}
 function findBest(scene,tokenSets){
   const list=[];
   scene.traverse(o=>{
     const n=clean(o.name);if(!n)return;
     let score=0;
-    for(const set of tokenSets){
-      const hits=set.filter(t=>n.includes(t)).length;
-      score=Math.max(score,hits===set.length?100+hits*12:hits*7);
-    }
+    for(const set of tokenSets){const hits=set.filter(t=>n.includes(t)).length;score=Math.max(score,hits===set.length?100+hits*12:hits*7)}
     if(score>0)list.push({o,score,n});
   });
   list.sort((a,b)=>b.score-a.score||a.n.length-b.n.length);
@@ -43,19 +42,36 @@ function findBest(scene,tokenSets){
   }
   return root.clone(true);
 }
+function tintVehicle(scene,label){
+  if(/police|ambulance|fire|taxi/i.test(label))return;
+  const tint=new THREE.Color(PALETTE[(colorCursor++)%PALETTE.length]);
+  scene.traverse(o=>{
+    if(!o.isMesh)return;
+    const on=clean(o.name),mats=Array.isArray(o.material)?o.material:[o.material];
+    const next=mats.map(mat=>{
+      if(!mat)return mat;
+      const mn=clean(mat.name),tag=`${on} ${mn}`;
+      if(/wheel|tire|tyre|rim|glass|window|windshield|light|lamp|chrome|interior|seat|plate|license/.test(tag))return mat;
+      const c=mat.color?.clone?.();if(!c)return mat;
+      const h={h:0,s:0,l:0};c.getHSL(h);
+      // Tint grey/neutral body materials strongly; already colourful paint only gets a light harmonising tint.
+      const mix=h.s<.22?.78:.24;
+      const clone=mat.clone();clone.color=c.lerp(tint,mix);clone.needsUpdate=true;return clone;
+    });
+    o.material=Array.isArray(o.material)?next:next[0];
+  });
+}
 
-if(!GLTFLoader.prototype.__karagamePremiumRedirectV3){
-  GLTFLoader.prototype.__karagamePremiumRedirectV3=true;
+if(!GLTFLoader.prototype.__karagamePremiumRedirectV4){
+  GLTFLoader.prototype.__karagamePremiumRedirectV4=true;
   const originalLoad=GLTFLoader.prototype.load;
   let fleetPromise=null;
   const loadFleet=()=>fleetPromise||(fleetPromise=new Promise((resolve,reject)=>{
     const l=new GLTFLoader();originalLoad.call(l,FLEET,g=>resolve(g.scene),undefined,reject);
   }));
 
-  // main_v4 normalizer rotates every loaded vehicle by PI because Kenney cars face -Z.
-  // Standalone premium models face +Z, so they need an inner PI to cancel that normalizer.
-  // Vehicles extracted from the fleet pack already follow the Kenney/-Z convention, so they MUST NOT be flipped here.
   const wrap=(scene,name,cancelNormalizer)=>{
+    tintVehicle(scene,name);
     const wrapper=new THREE.Group();
     if(cancelNormalizer)scene.rotation.y=Math.PI;
     wrapper.add(scene);
